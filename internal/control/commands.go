@@ -93,7 +93,7 @@ func ServiceEntries(cfg config.Services, runner command.Runner) []Entry {
 				}
 				return nil
 			}
-			out = append(out, Entry{Name: ch.Name + " " + op, Module: "services", Check: check, Action: Function{Key: "service_" + metric.Key(ch.Name) + "_" + op, Run: func(ctx context.Context) error {
+			out = append(out, Entry{Device: metric.DeviceRef{Kind: "service", Name: ch.Name}, Name: op, Module: "services", Check: check, Action: Function{Key: "service_" + metric.Key(ch.Name) + "_" + op, Run: func(ctx context.Context) error {
 				return argv(ctx, runner, []string{"systemctl", "--no-ask-password", op, ch.SystemdUnit})
 			}}})
 		}

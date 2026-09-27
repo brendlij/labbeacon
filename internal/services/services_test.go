@@ -29,6 +29,9 @@ func TestHTTP(t *testing.T) {
 	if s[0].Value != "ON" || s[1].Value != "OFF" || s[2].Value != "OFF" {
 		t.Fatalf("bad states: %v", s)
 	}
+	if s[0].Device.Kind != "service" || s[0].Device.Name != "ok" || s[0].Name != "Connectivity" {
+		t.Fatal("incorrect service grouping")
+	}
 	if s[0].Attributes["checked_at"] == nil || s[0].Attributes["response_time_ms"] == nil {
 		t.Fatal("missing attributes")
 	}

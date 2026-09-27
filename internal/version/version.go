@@ -1,4 +1,4 @@
 package version
 
 // Version is overridden at build time using -ldflags.
-var Version = "0.3.2-dev"
+var Version = "0.4.0-dev"

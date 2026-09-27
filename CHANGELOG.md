@@ -5,6 +5,17 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-27
+
+### Added
+- Separate Home Assistant container and service devices prefixed with the server
+  name, linked to the server, with Model/type metadata and matching control buttons.
+- Container status sensors and type/server reading attributes.
+
+### Changed
+- Short entity names within child devices and one-decimal percentage display.
+- Existing discovery topics and entity unique IDs remain unchanged on upgrade.
+
 ## [0.3.2] - 2026-09-27
 
 ### Fixed

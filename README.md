@@ -2,7 +2,7 @@
 
 **LabBeacon** is a small Go agent for each server: system metrics, Docker inventory and service checks
 sent to Home Assistant over MQTT, with optional control buttons and an embedded
-web UI as of 0.3.0. Each agent appears as a separate device through MQTT Discovery.
+web UI as of 0.3.0. MQTT Discovery creates a server device and separate container/service devices.
 Linux is the primary target; the binary also builds on Windows.
 
 **Requirements:** a reachable MQTT broker, the MQTT integration enabled in Home
@@ -12,6 +12,31 @@ from the cloned repository, so a published image is not required.
 
 > Screenshot placeholder: Home Assistant device “Server 1” with grouped sensors.
 > Screenshot placeholder: dashboard with CPU, RAM, network and service availability.
+
+## Home Assistant device layout
+
+Set **Agent & MQTT → Name** in the web UI to your server name (for example,
+`ser5-01`) and restart the agent to apply the identity change. Keep the existing
+agent **ID** unchanged when upgrading.
+
+| Device name | Model/type | Entities |
+| --- | --- | --- |
+| `ser5-01` | Server | System/network/VPN metrics, container totals, host/agent controls |
+| `ser5-01_paperlessngx-broker-1` | Container | Status, restart count, optional CPU/RAM/update check, enabled controls |
+| `ser5-01_Paperless` | Service | Connectivity and enabled systemd controls |
+
+Child devices link to their server through Home Assistant's `via_device` field.
+The device **Model** displays Container or Service; readings also expose `type`
+and `server` attributes. Container and service devices with the same name have
+separate identifiers. CPU percentages suggest one decimal place for display.
+
+Upgrading republishes discovery on the existing retained topics, keeping entity
+unique IDs, entity IDs and command topics unchanged. Existing readings move to
+child devices when they are next collected successfully; custom names in Home
+Assistant may remain. No MQTT integration reset is needed. Container entity IDs
+still follow Docker container IDs, as in previous versions; recreating a container
+can leave unavailable entities for the old ID. Those pre-existing stale entries
+are not automatically deleted by this grouping update.
 
 ## Quick start with Docker (Linux)
 
@@ -70,7 +95,7 @@ subject to the control master switch. Socket access grants extensive host permis
 ## Deploy with Komodo or another stack manager
 
 Use **UI Defined** in Komodo and paste [deploy/compose.ghcr.yaml](deploy/compose.ghcr.yaml)
-as the stack's Compose file. It pulls `ghcr.io/brendlij/labbeacon:0.3.2` instead of
+as the stack's Compose file. It pulls `ghcr.io/brendlij/labbeacon:0.4.0` instead of
 building from source. Save the stack configuration, then deploy it.
 
 First prepare the configuration **on the selected Docker server**, not inside the
@@ -102,7 +127,7 @@ problems: the stack manager needs the Compose definition, while the agent reads
 ## Quick start with the binary
 
 ```sh
-go build -trimpath -ldflags="-s -w -X github.com/brendlij/labbeacon/internal/version.Version=0.3.2" -o bin/labbeacon ./cmd/labbeacon
+go build -trimpath -ldflags="-s -w -X github.com/brendlij/labbeacon/internal/version.Version=0.4.0" -o bin/labbeacon ./cmd/labbeacon
 cp configs/config.example.yaml config.yaml
 # Configure the broker, ID, paths and example service checks.
 ./bin/labbeacon -config config.yaml -check-config
@@ -423,14 +448,14 @@ against an **isolated test broker without authentication**. This test uses the I
 `integration` and publishes discovery/availability to that broker.
 
 CI runs builds, vet, tests with the race detector, a Mosquitto test and Linux cross
-builds, plus Windows build/tests and a container build. Tags such as `v0.3.2`
+builds, plus Windows build/tests and a container build. Tags such as `v0.4.0`
 trigger a multi-architecture build (`linux/amd64`, `linux/arm64`) and push to
 `ghcr.io/<owner>/<repo>`. The image exists only after a successful workflow. Make
 the GHCR package public if public access is intended.
 
 ```sh
-git tag v0.3.2
-git push origin v0.3.2
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 Architecture: `internal/module.Module` exposes `Name()`, `Enabled()` and

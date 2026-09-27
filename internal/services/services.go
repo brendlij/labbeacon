@@ -89,5 +89,7 @@ func (c *Collector) check(parent context.Context, ch config.Check) metric.Sample
 		}
 	}
 	attrs["response_time_ms"] = float64(time.Since(start).Microseconds()) / 1000
-	return metric.Binary("service_"+metric.Key(ch.Name), ch.Name, online, attrs)
+	s := metric.Binary("service_"+metric.Key(ch.Name), "Connectivity", online, attrs)
+	s.Device = metric.DeviceRef{Kind: "service", Name: ch.Name}
+	return s
 }

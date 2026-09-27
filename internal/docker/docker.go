@@ -123,8 +123,12 @@ func (c *Collector) Collect(ctx context.Context) ([]metric.Sample, error) {
 		if v.Status == "running" {
 			running++
 		}
+		start := len(extra)
 		key := "container_" + metric.Key(v.ID)
-		extra = append(extra, metric.Sensor(key+"_restarts", v.Name+" restart count", "", v.RestartCount))
+		status := metric.Sensor(key+"_status", "Status", "", v.Status)
+		status.Attributes = map[string]any{"container_id": v.ID, "image": v.Image, "health": v.Health}
+		extra = append(extra, status)
+		extra = append(extra, metric.Sensor(key+"_restarts", "Restart count", "", v.RestartCount))
 		if c.Config.Stats && v.Status == "running" {
 			if statsResults != nil {
 				stats, e := statsResults[i].stats, statsResults[i].err
@@ -135,11 +139,11 @@ func (c *Collector) Collect(ctx context.Context) ([]metric.Sample, error) {
 					v.MemoryBytes = &stats.Memory
 					v.MemoryLimit = &stats.Limit
 					if stats.CPU != nil {
-						sample := metric.Sensor(key+"_cpu", v.Name+" CPU", "%", *stats.CPU)
+						sample := metric.Sensor(key+"_cpu", "CPU", "%", *stats.CPU)
 						sample.StateClass = "measurement"
 						extra = append(extra, sample)
 					}
-					sample := metric.Sensor(key+"_ram", v.Name+" RAM", "B", stats.Memory)
+					sample := metric.Sensor(key+"_ram", "RAM", "B", stats.Memory)
 					sample.StateClass = "measurement"
 					extra = append(extra, sample)
 				}
@@ -152,10 +156,13 @@ func (c *Collector) Collect(ctx context.Context) ([]metric.Sample, error) {
 			}
 			v.UpdateAvailable = available
 			if available != nil {
-				sample := metric.Binary(key+"_image_update", v.Name+" image update", *available, nil)
+				sample := metric.Binary(key+"_image_update", "Image update", *available, nil)
 				sample.DeviceClass = "update"
 				extra = append(extra, sample)
 			}
+		}
+		for j := start; j < len(extra); j++ {
+			extra[j].Device = metric.DeviceRef{Kind: "container", Name: v.Name}
 		}
 	}
 	c.Snapshot = containers

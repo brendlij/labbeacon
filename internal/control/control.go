@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/brendlij/labbeacon/internal/metric"
 )
 
 var ErrRestart = errors.New("agent restart requested")
@@ -21,6 +23,7 @@ type Provider interface {
 	Actions(context.Context) ([]Entry, error)
 }
 type Entry struct {
+	Device                   metric.DeviceRef
 	Action                   Action
 	Name, Module, Transition string
 	Check                    func(context.Context) error

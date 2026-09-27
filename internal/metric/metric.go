@@ -9,7 +9,15 @@ import (
 	"strings"
 )
 
+// DeviceRef groups related entities without changing their MQTT identities.
+// An empty Kind keeps the entity on the server device.
+type DeviceRef struct {
+	Kind string
+	Name string
+}
+
 type Sample struct {
+	Device      DeviceRef
 	Key         string
 	Name        string
 	Component   string

@@ -85,7 +85,7 @@ func (c *Collector) Actions(ctx context.Context) ([]control.Entry, error) {
 			continue
 		}
 		for _, op := range []string{"start", "stop", "restart"} {
-			out = append(out, control.Entry{Name: v.Name + " " + op, Module: "docker", Check: func(ctx context.Context) error {
+			out = append(out, control.Entry{Device: metric.DeviceRef{Kind: "container", Name: v.Name}, Name: op, Module: "docker", Check: func(ctx context.Context) error {
 				if !c.Config.ControlContainers.Permits(v.Name) {
 					return fmt.Errorf("container no longer allowed")
 				}

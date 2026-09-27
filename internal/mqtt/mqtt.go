@@ -17,10 +17,10 @@ import (
 	"github.com/brendlij/labbeacon/internal/config"
 	"github.com/brendlij/labbeacon/internal/control"
 	"github.com/brendlij/labbeacon/internal/metric"
-	"github.com/brendlij/labbeacon/internal/version"
 )
 
 type Device struct {
+	ViaDevice    string   `json:"via_device,omitempty"`
 	Identifiers  []string `json:"identifiers"`
 	Name         string   `json:"name"`
 	Manufacturer string   `json:"manufacturer"`
@@ -110,7 +110,7 @@ func Discovery(cfg config.Config, s metric.Sample) map[string]any {
 		"payload_available":        "online",
 		"payload_not_available":    "offline",
 		"expire_after":             int(cfg.Agent.ExpireAfter / time.Second),
-		"device":                   Device{Identifiers: []string{cfg.Agent.ID}, Name: cfg.Agent.Name, Manufacturer: "labbeacon", Version: version.Version},
+		"device":                   discoveryDevice(cfg, s.Device),
 	}
 	if s.Unit != "" {
 		d["unit_of_measurement"] = s.Unit
@@ -120,6 +120,9 @@ func Discovery(cfg config.Config, s metric.Sample) map[string]any {
 	}
 	if s.StateClass != "" {
 		d["state_class"] = s.StateClass
+	}
+	if s.Unit == "%" {
+		d["suggested_display_precision"] = 1
 	}
 	if s.Component == "binary_sensor" {
 		d["payload_on"] = "ON"
@@ -141,10 +144,15 @@ func PublishSample(ctx context.Context, p Publisher, cfg config.Config, s metric
 	if err = wait(ctx, p.Publish(cfg.MQTT.DiscoveryPrefix+"/"+s.Component+"/"+cfg.Agent.ID+"/"+s.Key+"/config", 1, true, discovery)); err != nil {
 		return err
 	}
-	attrs := s.Attributes
-	if attrs == nil {
-		attrs = map[string]any{}
+	attrs := make(map[string]any, len(s.Attributes)+2)
+	for k, v := range s.Attributes {
+		attrs[k] = v
 	}
+	attrs["type"] = "server"
+	if s.Device.Kind != "" {
+		attrs["type"] = s.Device.Kind
+	}
+	attrs["server"] = cfg.Agent.Name
 	state, err := json.Marshal(map[string]any{"value": s.Value, "attributes": attrs})
 	if err != nil {
 		return err

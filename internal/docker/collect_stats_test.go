@@ -21,7 +21,7 @@ func (*slowStatsAPI) Containers(context.Context) ([]Container, error) {
 	for i := range 24 {
 		out = append(out, Container{ID: strconv.Itoa(i), Name: strconv.Itoa(i), Status: "running"})
 	}
-	return append(out, Container{ID: "stopped", Status: "exited"}), nil
+	return append(out, Container{ID: "stopped", Name: "stopped", Status: "exited"}), nil
 }
 
 func (a *slowStatsAPI) Stats(ctx context.Context, id string) (Stats, error) {
@@ -59,6 +59,14 @@ func TestSlowStatsDoNotExhaustLaterContainers(t *testing.T) {
 		if i >= statsWorkers && (v.MemoryBytes == nil || *v.MemoryBytes != 42) {
 			t.Fatalf("container %d inherited expired deadline", i)
 		}
+	}
+	for _, sample := range samples[2:] {
+		if sample.Device.Kind != "container" || sample.Device.Name == "" {
+			t.Fatalf("ungrouped metric: %+v", sample)
+		}
+	}
+	if samples[0].Device.Kind != "" {
+		t.Fatal("summary moved off server")
 	}
 	if api.calls != 24 || api.peak > statsWorkers || api.peak < 2 || api.active != 0 {
 		t.Fatalf("bad worker bounds: %+v", api)
