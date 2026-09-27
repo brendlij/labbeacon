@@ -1,7 +1,7 @@
 # Linux host monitoring. Docker Desktop reports its Linux VM, not Windows/macOS.
 services:
   labbeacon:
-    image: ghcr.io/brendlij/labbeacon:0.3.0
+    image: ghcr.io/brendlij/labbeacon:0.3.1
     restart: unless-stopped
     network_mode: host
     pid: host

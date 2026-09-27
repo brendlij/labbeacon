@@ -132,6 +132,35 @@ func TestCSRFAndOrigin(t *testing.T) {
 		t.Fatal("cross-origin accepted")
 	}
 }
+
+func TestNativeFormOriginPolicy(t *testing.T) {
+	s, _ := fixture(t)
+	v, cookie := fullForm(t, s)
+	for _, path := range []string{"/", "/config"} {
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "http://127.0.0.1:8011"+path, nil))
+		if w.Header().Get("Referrer-Policy") != "same-origin" {
+			t.Fatal("native form posts must retain their same-origin Origin header")
+		}
+	}
+	for _, path := range []string{"/config", "/config/reload"} {
+		for _, origin := range []string{"null", "http://attacker.example", "http://127.0.0.1:8012", "http://127.0.0.1:8011"} {
+			r := httptest.NewRequest("POST", "http://127.0.0.1:8011"+path, strings.NewReader(v.Encode()))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			r.Header.Set("Origin", origin)
+			r.AddCookie(cookie)
+			w := httptest.NewRecorder()
+			s.Handler().ServeHTTP(w, r)
+			want := http.StatusForbidden
+			if origin == "http://127.0.0.1:8011" {
+				want = http.StatusSeeOther
+			}
+			if w.Code != want {
+				t.Fatalf("%s origin %q: got %d, want %d: %s", path, origin, w.Code, want, w.Body.String())
+			}
+		}
+	}
+}
 func TestDangerAcknowledgmentAndConflict(t *testing.T) {
 	s, _ := fixture(t)
 	v, cookie := fullForm(t, s)
@@ -149,24 +178,17 @@ func TestDangerAcknowledgmentAndConflict(t *testing.T) {
 }
 func TestAuthenticationAndHost(t *testing.T) {
 	s, _ := fixture(t)
-	s.Settings.Username = "admin"
-	s.Settings.Password = "password"
-	for _, path := range []string{"/", "/config", "/config/export", "/assets/app.js"} {
+	s.Settings.Username, s.Settings.Password = "admin", "password"
+	for _, path := range []string{"/", "/config", "/config/export"} {
 		r := httptest.NewRequest("GET", "http://localhost"+path, nil)
+		r.SetBasicAuth("admin", "password")
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, r)
-		if w.Code != 401 {
-			t.Fatalf("unprotected %s", path)
-		}
-		r.SetBasicAuth("admin", "password")
-		w = httptest.NewRecorder()
-		s.Handler().ServeHTTP(w, r)
-		if w.Code != 200 {
-			t.Fatalf("valid login denied %s: %s", path, w.Body.String())
+		if w.Code != 303 || w.Header().Get("Location") != "/login" || w.Header().Get("WWW-Authenticate") != "" {
+			t.Fatalf("unprotected or browser prompt: %s", path)
 		}
 	}
-	r := httptest.NewRequest("GET", "http://attacker.example/", nil)
-	r.SetBasicAuth("admin", "password")
+	r := httptest.NewRequest("GET", "http://attacker.example/login", nil)
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, r)
 	if w.Code != 403 {

@@ -70,7 +70,7 @@ subject to the control master switch. Socket access grants extensive host permis
 ## Deploy with Komodo or another stack manager
 
 Use **UI Defined** in Komodo and paste [deploy/compose.ghcr.yaml](deploy/compose.ghcr.yaml)
-as the stack's Compose file. It pulls `ghcr.io/brendlij/labbeacon:0.3.0` instead of
+as the stack's Compose file. It pulls `ghcr.io/brendlij/labbeacon:0.3.1` instead of
 building from source. Save the stack configuration, then deploy it.
 
 First prepare the configuration **on the selected Docker server**, not inside the
@@ -92,7 +92,7 @@ a read-only single-file mount. The image supports Linux amd64 and arm64.
 The default web UI remains bound to `127.0.0.1:8011` on the Docker host because the
 container uses host networking. Access it through the SSH tunnel described below.
 For explicit LAN access, configure `webui.bind_address`, username and password;
-Basic Auth over HTTP is not encrypted. No Compose `ports` mapping is needed with
+Login over HTTP is not encrypted. No Compose `ports` mapping is needed with
 host networking. Docker monitoring requires the optional socket mount/group access.
 
 A missing stack Compose file and a missing LabBeacon `config.yaml` are separate
@@ -102,7 +102,7 @@ problems: the stack manager needs the Compose definition, while the agent reads
 ## Quick start with the binary
 
 ```sh
-go build -trimpath -ldflags="-s -w -X github.com/brendlij/labbeacon/internal/version.Version=0.3.0" -o bin/labbeacon ./cmd/labbeacon
+go build -trimpath -ldflags="-s -w -X github.com/brendlij/labbeacon/internal/version.Version=0.3.1" -o bin/labbeacon ./cmd/labbeacon
 cp configs/config.example.yaml config.yaml
 # Configure the broker, ID, paths and example service checks.
 ./bin/labbeacon -config config.yaml -check-config
@@ -165,8 +165,14 @@ authentication enabled. To use DNS names, also set an exact hostname allowlist,
 for example `allowed_hosts: [server.home.arpa]`. The UI rejects other hostnames to
 protect against DNS rebinding.
 
+When credentials are configured, `/login` displays a normal sign-in page using
+the existing `webui.username` and `webui.password`. Sessions expire after 12 hours
+or an agent restart; **Sign out** immediately invalidates the current session.
+Session cookies are HttpOnly and SameSite=Strict (Secure on direct HTTPS).
+Login, logout, Save and Reload all require CSRF tokens.
+
 **Do not expose the UI to the internet without protection.** It provides access
-to configuration, control permissions and stored secrets. Basic Auth over HTTP
+to configuration, control permissions and stored secrets. Login over HTTP
 does not provide encryption. For remote access, preferably keep loopback binding
 and use an SSH tunnel: `ssh -L 8011:127.0.0.1:8011 user@server`, then open the local
 URL. Reverse-proxy TLS termination is not currently configured: the UI does not
@@ -412,14 +418,14 @@ against an **isolated test broker without authentication**. This test uses the I
 `integration` and publishes discovery/availability to that broker.
 
 CI runs builds, vet, tests with the race detector, a Mosquitto test and Linux cross
-builds, plus Windows build/tests and a container build. Tags such as `v0.3.0`
+builds, plus Windows build/tests and a container build. Tags such as `v0.3.1`
 trigger a multi-architecture build (`linux/amd64`, `linux/arm64`) and push to
 `ghcr.io/<owner>/<repo>`. The image exists only after a successful workflow. Make
 the GHCR package public if public access is intended.
 
 ```sh
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.3.1
+git push origin v0.3.1
 ```
 
 Architecture: `internal/module.Module` exposes `Name()`, `Enabled()` and

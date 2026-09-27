@@ -1,4 +1,4 @@
-{{define "head"}}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} · labbeacon</title><link rel="stylesheet" href="/assets/style.css"><script defer src="/assets/app.js"></script></head><body><header><a class="brand" href="/">◈ labbeacon</a><nav><a href="/">Overview</a><a href="/config">Settings</a><span class="version">{{.Version}}</span></nav></header><main>{{end}}
+{{define "head"}}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} · labbeacon</title><link rel="stylesheet" href="/assets/style.css"><script defer src="/assets/app.js"></script></head><body><header><a class="brand" href="/">◈ labbeacon</a><nav><a href="/">Overview</a><a href="/config">Settings</a>{{if .Authenticated}}<form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="secondary" type="submit">Sign out</button></form>{{end}}<span class="version">{{.Version}}</span></nav></header><main>{{end}}
 {{define "foot"}}</main><footer>Local administration · labbeacon</footer></body></html>{{end}}
 {{define "notices"}}
 {{if .State.Pending}}<div class="notice" role="status">Changes saved. Live updates are pending.</div>{{end}}
@@ -28,3 +28,12 @@
 <template id="service-template">{{template "service" .ServiceDefault}}</template>
 {{template "foot" .}}{{end}}
 {{define "service"}}<article class="service"><div class="section-head"><h3>Service</h3><button type="button" class="remove-service secondary">Remove</button></div><div class="fields"><label class="field">Name<input data-field="name" value="{{.Name}}" required></label><label class="field">Type<select data-field="type"><option value="http" {{if eq .Type "http"}}selected{{end}}>HTTP(S)</option><option value="tcp" {{if eq .Type "tcp"}}selected{{end}}>TCP</option></select></label><label class="field">HTTP(S) URL<input data-field="url" value="{{.URL}}" placeholder="https://service.example/health"></label><label class="field">HTTP status<input data-field="expected_status" type="number" value="{{.ExpectedStatus}}"></label><label class="field">TCP host<input data-field="host" value="{{.Host}}"></label><label class="field">TCP port<input data-field="port" type="number" value="{{.Port}}"></label><label class="field">Timeout<input data-field="timeout" value="{{.Timeout}}" placeholder="5s" required></label><label class="field">systemd unit (optional)<input data-field="systemd_unit" value="{{.SystemdUnit}}" placeholder="example.service"></label><label class="check"><input data-field="allow_control" type="checkbox" {{if .AllowControl}}checked{{end}}> Allow systemd control</label></div></article>{{end}}
+
+{{define "login"}}{{template "head" .}}
+<section class="panel login-panel"><p class="eyebrow">WELCOME TO LABBEACON</p><h1>Sign in</h1><p>Use the web UI credentials configured for this agent.</p>
+{{if .Error}}<p role="alert" class="error-detail">{{.Error}}</p>{{end}}
+<form method="post" action="/login"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<label class="field"><span>Username</span><input name="username" autocomplete="username" required autofocus></label>
+<label class="field"><span>Password</span><input type="password" name="password" autocomplete="current-password" required></label>
+<button type="submit">Sign in</button></form></section>
+{{template "foot" .}}{{end}}

@@ -5,7 +5,16 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-27
+
+### Fixed
+- Native browser Save and Reload forms no longer lose their Origin header due to
+  the referrer policy. Same-origin form posts work while null/foreign origins and
+  invalid CSRF tokens remain rejected.
+
 ### Changed
+- Replaced browser Basic Auth prompts with a login page, expiring server-side
+  sessions and CSRF-protected sign out; existing web UI credentials still apply.
 - Renamed the project to LabBeacon (`labbeacon` binary, service and container).
 - Standardized the web UI, status/error messages, README and documentation examples on English.
 

@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"embed"
 	"encoding/hex"
 	"errors"
@@ -19,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/brendlij/labbeacon/internal/config"
 	"github.com/brendlij/labbeacon/internal/version"
@@ -36,9 +36,12 @@ type Server struct {
 	key       []byte
 	templates *template.Template
 	saveMu    sync.Mutex
+	sessionMu sync.Mutex
+	sessions  map[string]time.Time
 }
 type page struct {
 	Title, Version, CSRF, Message, Error, Revision string
+	Authenticated                                  bool
 	State                                          Snapshot
 	MQTT                                           bool
 	Sections                                       []section
@@ -58,10 +61,13 @@ func New(store *config.Store, state *State, settings config.WebUI, connected fun
 	if err != nil {
 		return nil, err
 	}
-	return &Server{Store: store, State: state, Settings: settings, Connected: connected, Log: log, key: key, templates: t}, nil
+	return &Server{Store: store, State: state, Settings: settings, Connected: connected, Log: log, key: key, templates: t, sessions: make(map[string]time.Time)}, nil
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /login", s.loginForm)
+	mux.HandleFunc("POST /login", s.login)
+	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /{$}", s.overview)
 	mux.HandleFunc("GET /config", s.form)
 	mux.HandleFunc("POST /config", s.save)
@@ -124,23 +130,19 @@ func (s *Server) secure(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Referrer-Policy", "no-referrer")
+		// no-referrer makes native form POSTs send Origin: null, which our
+		// origin guard must reject. Preserve same-origin submissions without
+		// disclosing referrers to other origins.
+		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'")
 		if !s.hostAllowed(r.Host) {
 			http.Error(w, "Hostname not allowed.", http.StatusForbidden)
 			return
 		}
-		if s.Settings.Username != "" {
-			user, password, ok := r.BasicAuth()
-			u := sha256.Sum256([]byte(user))
-			p := sha256.Sum256([]byte(password))
-			eu := sha256.Sum256([]byte(s.Settings.Username))
-			ep := sha256.Sum256([]byte(s.Settings.Password))
-			if !ok || subtle.ConstantTimeCompare(u[:], eu[:])&subtle.ConstantTimeCompare(p[:], ep[:]) != 1 {
-				w.Header().Set("WWW-Authenticate", `Basic realm="labbeacon", charset="UTF-8"`)
-				http.Error(w, "Authentication required.", http.StatusUnauthorized)
-				return
-			}
+		public := r.URL.Path == "/login" || strings.HasPrefix(r.URL.Path, "/assets/")
+		if s.Settings.Username != "" && !public && !s.authenticated(r) {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
 		}
 		if r.Method == http.MethodPost {
 			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -178,7 +180,7 @@ func (s *Server) base(w http.ResponseWriter, r *http.Request) page {
 	if s.Connected != nil {
 		connected = s.Connected()
 	}
-	return page{Version: version.Version, CSRF: s.token(w, r), State: s.State.View(), MQTT: connected, ServiceDefault: serviceForm{Type: "http", ExpectedStatus: 200, Timeout: "5s"}}
+	return page{Authenticated: s.Settings.Username != "" && s.authenticated(r), Version: version.Version, CSRF: s.token(w, r), State: s.State.View(), MQTT: connected, ServiceDefault: serviceForm{Type: "http", ExpectedStatus: 200, Timeout: "5s"}}
 }
 func (s *Server) render(w http.ResponseWriter, name string, p page) {
 	var b bytes.Buffer
