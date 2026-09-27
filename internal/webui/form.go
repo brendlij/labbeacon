@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brendlij/labbeacon/internal/config"
 	"go.yaml.in/yaml/v3"
-	"homelab-agent/internal/config"
 )
 
 type field struct {

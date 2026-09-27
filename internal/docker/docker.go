@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/metric"
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/metric"
 )
 
 type Container struct {

@@ -20,8 +20,8 @@ import (
 	"strings"
 	"sync"
 
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/version"
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/version"
 )
 
 //go:embed assets/*
@@ -137,7 +137,7 @@ func (s *Server) secure(next http.Handler) http.Handler {
 			eu := sha256.Sum256([]byte(s.Settings.Username))
 			ep := sha256.Sum256([]byte(s.Settings.Password))
 			if !ok || subtle.ConstantTimeCompare(u[:], eu[:])&subtle.ConstantTimeCompare(p[:], ep[:]) != 1 {
-				w.Header().Set("WWW-Authenticate", `Basic realm="homelab-agent", charset="UTF-8"`)
+				w.Header().Set("WWW-Authenticate", `Basic realm="labbeacon", charset="UTF-8"`)
 				http.Error(w, "Authentication required.", http.StatusUnauthorized)
 				return
 			}

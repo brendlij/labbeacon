@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/control"
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/control"
 )
 
 type commandMessage struct {

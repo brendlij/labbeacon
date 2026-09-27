@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"homelab-agent/internal/config"
+	"github.com/brendlij/labbeacon/internal/config"
 )
 
 type ModuleStatus struct {

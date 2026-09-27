@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brendlij/labbeacon/internal/config"
 	"go.yaml.in/yaml/v3"
-	"homelab-agent/internal/config"
 )
 
 func fixture(t *testing.T) (*Server, config.Config) {

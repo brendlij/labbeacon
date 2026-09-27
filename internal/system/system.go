@@ -13,8 +13,8 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	gnet "github.com/shirou/gopsutil/v4/net"
 
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/metric"
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/metric"
 )
 
 type Collector struct {

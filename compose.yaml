@@ -1,11 +1,11 @@
 # Linux host monitoring. Docker Desktop reports its Linux VM, not Windows/macOS.
 services:
-  homelab-agent:
+  labbeacon:
     build:
       context: .
       args:
         VERSION: 0.3.0
-    image: homelab-agent:local
+    image: labbeacon:local
     restart: unless-stopped
     network_mode: host
     pid: host
@@ -23,7 +23,7 @@ services:
     volumes:
       - type: bind
         source: ./config-data
-        target: /etc/homelab-agent
+        target: /etc/labbeacon
         read_only: false
         bind:
           create_host_path: false

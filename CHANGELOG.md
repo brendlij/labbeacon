@@ -6,6 +6,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Renamed the project to LabBeacon (`labbeacon` binary, service and container).
 - Standardized the web UI, status/error messages, README and documentation examples on English.
 
 ## [0.3.0] - 2026-09-27

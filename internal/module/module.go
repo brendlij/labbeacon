@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"homelab-agent/internal/control"
-	"homelab-agent/internal/metric"
+	"github.com/brendlij/labbeacon/internal/control"
+	"github.com/brendlij/labbeacon/internal/metric"
 )
 
 type Module interface {

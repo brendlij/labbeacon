@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"homelab-agent/internal/command"
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/control"
-	"homelab-agent/internal/docker"
-	"homelab-agent/internal/mqtt"
-	"homelab-agent/internal/version"
-	"homelab-agent/internal/webui"
+	"github.com/brendlij/labbeacon/internal/command"
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/control"
+	"github.com/brendlij/labbeacon/internal/docker"
+	"github.com/brendlij/labbeacon/internal/mqtt"
+	"github.com/brendlij/labbeacon/internal/version"
+	"github.com/brendlij/labbeacon/internal/webui"
 )
 
 func controlEnabled(c config.Config) bool {

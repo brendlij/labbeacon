@@ -5,16 +5,16 @@ After=network-online.target
 
 [Service]
 Type=simple
-User=homelab-agent
-Group=homelab-agent
-EnvironmentFile=-/etc/homelab-agent/environment
-ExecStart=/usr/local/bin/homelab-agent -config /etc/homelab-agent/config.yaml
+User=labbeacon
+Group=labbeacon
+EnvironmentFile=-/etc/labbeacon/environment
+ExecStart=/usr/local/bin/labbeacon -config /etc/labbeacon/config.yaml
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=10
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/etc/homelab-agent
+ReadWritePaths=/etc/labbeacon
 ProtectHome=read-only
 PrivateTmp=true
 

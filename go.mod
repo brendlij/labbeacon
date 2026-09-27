@@ -1,4 +1,4 @@
-module homelab-agent
+module github.com/brendlij/labbeacon
 
 go 1.25.0
 

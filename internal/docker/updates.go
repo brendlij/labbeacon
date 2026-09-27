@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"homelab-agent/internal/config"
+	"github.com/brendlij/labbeacon/internal/config"
 )
 
 type DigestSource interface {

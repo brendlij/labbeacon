@@ -14,10 +14,10 @@ import (
 
 	paho "github.com/eclipse/paho.mqtt.golang"
 
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/control"
-	"homelab-agent/internal/metric"
-	"homelab-agent/internal/version"
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/control"
+	"github.com/brendlij/labbeacon/internal/metric"
+	"github.com/brendlij/labbeacon/internal/version"
 )
 
 type Device struct {
@@ -46,7 +46,7 @@ type Client struct {
 func New(cfg config.Config, log *slog.Logger) *Client {
 	c := &Client{cfg: cfg, Wake: make(chan struct{}, 1), Commands: make(chan control.Request, 8), buttons: map[string]bool{}, observed: map[string]bool{}, log: log}
 	c.expiry.Store(int64(cfg.Agent.ExpireAfter))
-	opts := paho.NewClientOptions().AddBroker(cfg.MQTT.Broker).SetClientID("homelab-agent-"+cfg.Agent.ID).
+	opts := paho.NewClientOptions().AddBroker(cfg.MQTT.Broker).SetClientID("labbeacon-"+cfg.Agent.ID).
 		SetUsername(cfg.MQTT.Username).SetPassword(cfg.MQTT.Password).
 		SetCleanSession(true).SetAutoReconnect(true).SetMaxReconnectInterval(30*time.Second).
 		SetConnectTimeout(5*time.Second).SetWriteTimeout(5*time.Second).
@@ -110,7 +110,7 @@ func Discovery(cfg config.Config, s metric.Sample) map[string]any {
 		"payload_available":        "online",
 		"payload_not_available":    "offline",
 		"expire_after":             int(cfg.Agent.ExpireAfter / time.Second),
-		"device":                   Device{Identifiers: []string{cfg.Agent.ID}, Name: cfg.Agent.Name, Manufacturer: "homelab-agent", Version: version.Version},
+		"device":                   Device{Identifiers: []string{cfg.Agent.ID}, Name: cfg.Agent.Name, Manufacturer: "labbeacon", Version: version.Version},
 	}
 	if s.Unit != "" {
 		d["unit_of_measurement"] = s.Unit

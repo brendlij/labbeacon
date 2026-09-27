@@ -21,7 +21,7 @@ jobs:
       - name: Compile both Linux architectures
         run: |
           for arch in amd64 arm64; do
-            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -o /tmp/homelab-agent-$arch ./cmd/homelab-agent
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -o /tmp/labbeacon-$arch ./cmd/labbeacon
           done
       - name: MQTT integration
         run: |
@@ -30,7 +30,7 @@ jobs:
           mosquitto -p 18884 > /tmp/mosquitto.log 2>&1 &
           MQTT_TEST_BROKER=tcp://127.0.0.1:18884 go test -race -count=1 ./internal/mqtt -run TestBrokerIntegration
       - name: Container build
-        run: docker build -t homelab-agent:test .
+        run: docker build -t labbeacon:test .
   windows:
     runs-on: windows-latest
     steps:

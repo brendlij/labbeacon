@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"homelab-agent/internal/metric"
-	"homelab-agent/internal/version"
+	"github.com/brendlij/labbeacon/internal/metric"
+	"github.com/brendlij/labbeacon/internal/version"
 )
 
 type Collector struct {

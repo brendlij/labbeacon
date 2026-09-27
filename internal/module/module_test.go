@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"homelab-agent/internal/metric"
+	"github.com/brendlij/labbeacon/internal/metric"
 )
 
 type fake struct {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"homelab-agent/internal/config"
+	"github.com/brendlij/labbeacon/internal/config"
 )
 
 func TestManagerGatesAndAudit(t *testing.T) {

@@ -14,8 +14,8 @@ import (
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
 	"github.com/mochi-mqtt/server/v2/listeners"
 
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/control"
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/control"
 )
 
 func TestAgentRestartGraceful(t *testing.T) {

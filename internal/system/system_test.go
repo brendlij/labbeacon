@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"homelab-agent/internal/metric"
+	"github.com/brendlij/labbeacon/internal/metric"
 )
 
 func TestCollectPartialDiskFailure(t *testing.T) {

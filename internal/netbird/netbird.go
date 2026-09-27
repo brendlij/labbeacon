@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"homelab-agent/internal/command"
-	"homelab-agent/internal/metric"
+	"github.com/brendlij/labbeacon/internal/command"
+	"github.com/brendlij/labbeacon/internal/metric"
 )
 
 type Collector struct {

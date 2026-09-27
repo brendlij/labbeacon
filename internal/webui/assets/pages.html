@@ -1,5 +1,5 @@
-{{define "head"}}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} · homelab-agent</title><link rel="stylesheet" href="/assets/style.css"><script defer src="/assets/app.js"></script></head><body><header><a class="brand" href="/">◈ homelab-agent</a><nav><a href="/">Overview</a><a href="/config">Settings</a><span class="version">{{.Version}}</span></nav></header><main>{{end}}
-{{define "foot"}}</main><footer>Local administration · homelab-agent</footer></body></html>{{end}}
+{{define "head"}}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} · labbeacon</title><link rel="stylesheet" href="/assets/style.css"><script defer src="/assets/app.js"></script></head><body><header><a class="brand" href="/">◈ labbeacon</a><nav><a href="/">Overview</a><a href="/config">Settings</a><span class="version">{{.Version}}</span></nav></header><main>{{end}}
+{{define "foot"}}</main><footer>Local administration · labbeacon</footer></body></html>{{end}}
 {{define "notices"}}
 {{if .State.Pending}}<div class="notice" role="status">Changes saved. Live updates are pending.</div>{{end}}
 {{if .State.Restart}}<div class="notice warning" role="status"><strong>Changes require an agent restart</strong><ul>{{range .State.Restart}}<li>{{.}}</li>{{end}}</ul>The previous settings remain active until the agent restarts.</div>{{end}}

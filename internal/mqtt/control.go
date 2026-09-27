@@ -10,9 +10,9 @@ import (
 
 	paho "github.com/eclipse/paho.mqtt.golang"
 
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/control"
-	"homelab-agent/internal/version"
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/control"
+	"github.com/brendlij/labbeacon/internal/version"
 )
 
 func (c *Client) Session() string { c.controlMu.RLock(); defer c.controlMu.RUnlock(); return c.session }
@@ -23,7 +23,7 @@ func ButtonDiscovery(cfg config.Config, e control.Entry, session string) map[str
 		"name": e.Name, "unique_id": cfg.Agent.ID + "_" + e.Action.ID(), "default_entity_id": "button." + strings.ToLower(strings.ReplaceAll(cfg.Agent.ID, "-", "_")) + "_" + e.Action.ID(),
 		"command_topic": cfg.Agent.ID + "/button/" + e.Action.ID() + "/command", "payload_press": string(payload), "qos": 0, "retain": false,
 		"availability_topic": cfg.Agent.ID + "/availability", "payload_available": "online", "payload_not_available": "offline", "entity_category": "config",
-		"device": Device{Identifiers: []string{cfg.Agent.ID}, Name: cfg.Agent.Name, Manufacturer: "homelab-agent", Version: version.Version},
+		"device": Device{Identifiers: []string{cfg.Agent.ID}, Name: cfg.Agent.Name, Manufacturer: "labbeacon", Version: version.Version},
 	}
 }
 func (c *Client) receiveCommand(_ paho.Client, msg paho.Message) {

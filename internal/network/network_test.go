@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"homelab-agent/internal/config"
+	"github.com/brendlij/labbeacon/internal/config"
 )
 
 func TestPublicIPCacheAndInvalidResponse(t *testing.T) {

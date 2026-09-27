@@ -13,8 +13,8 @@ import (
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
 	"github.com/mochi-mqtt/server/v2/listeners"
 
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/metric"
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/metric"
 )
 
 // Runs with an embedded TCP broker by default; CI also runs against Mosquitto.
@@ -98,7 +98,7 @@ func TestBrokerIntegration(t *testing.T) {
 	receive("homeassistant/sensor/integration/cpu_percent/config", "")
 	receive("integration/sensor/cpu_percent/state", "")
 	if server != nil {
-		remote, ok := server.Clients.Get("homelab-agent-integration")
+		remote, ok := server.Clients.Get("labbeacon-integration")
 		if !ok {
 			t.Fatal("agent missing from broker")
 		}

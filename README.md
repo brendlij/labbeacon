@@ -1,6 +1,6 @@
-# homelab-agent
+# LabBeacon
 
-A small Go binary per server: system metrics, Docker inventory and service checks
+**LabBeacon** is a small Go agent for each server: system metrics, Docker inventory and service checks
 sent to Home Assistant over MQTT, with optional control buttons and an embedded
 web UI as of 0.3.0. Each agent appears as a separate device through MQTT Discovery.
 Linux is the primary target; the binary also builds on Windows.
@@ -15,17 +15,21 @@ from the cloned repository, so a published image is not required.
 
 ## Quick start with Docker (Linux)
 
-From the cloned repository:
+On your Linux server, with Git and Docker Compose installed:
 
 ```sh
+git clone https://github.com/brendlij/labbeacon.git
+cd labbeacon
 mkdir -p config-data
 cp configs/config.docker.example.yaml config-data/config.yaml
-# Set agent.id, agent.name and mqtt.broker in config-data/config.yaml.
+# Set agent.id, agent.name and mqtt.broker before starting.
+# Add MQTT credentials if your broker requires them.
+nano config-data/config.yaml
 # Atomic UI saves require directory write access for the container UID:
 sudo chown -R 65532:65532 config-data
 sudo chmod 700 config-data
 sudo chmod 600 config-data/config.yaml
-docker compose run --rm homelab-agent -config /etc/homelab-agent/config.yaml -check-config
+docker compose run --rm labbeacon -config /etc/labbeacon/config.yaml -check-config
 docker compose up -d --build
 docker compose logs -f
 ```
@@ -66,11 +70,11 @@ subject to the control master switch. Socket access grants extensive host permis
 ## Quick start with the binary
 
 ```sh
-go build -trimpath -ldflags="-s -w -X homelab-agent/internal/version.Version=0.3.0" -o bin/homelab-agent ./cmd/homelab-agent
+go build -trimpath -ldflags="-s -w -X github.com/brendlij/labbeacon/internal/version.Version=0.3.0" -o bin/labbeacon ./cmd/labbeacon
 cp configs/config.example.yaml config.yaml
 # Configure the broker, ID, paths and example service checks.
-./bin/homelab-agent -config config.yaml -check-config
-./bin/homelab-agent -config config.yaml
+./bin/labbeacon -config config.yaml -check-config
+./bin/labbeacon -config config.yaml
 ```
 
 `-version` prints the build version. `SIGINT`/`SIGTERM` cancels ongoing checks,
@@ -81,20 +85,20 @@ Container deployment and systemd support target Linux.
 
 ### systemd
 
-A unit is provided in `deploy/homelab-agent.service`. Installation after building:
+A unit is provided in `deploy/labbeacon.service`. Installation after building:
 
 ```sh
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin homelab-agent
-sudo install -m 0755 bin/homelab-agent /usr/local/bin/homelab-agent
-sudo install -d -m 0700 -o homelab-agent -g homelab-agent /etc/homelab-agent
-sudo install -m 0600 -o homelab-agent -g homelab-agent config.yaml /etc/homelab-agent/config.yaml
-sudo install -m 0644 deploy/homelab-agent.service /etc/systemd/system/
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin labbeacon
+sudo install -m 0755 bin/labbeacon /usr/local/bin/labbeacon
+sudo install -d -m 0700 -o labbeacon -g labbeacon /etc/labbeacon
+sudo install -m 0600 -o labbeacon -g labbeacon config.yaml /etc/labbeacon/config.yaml
+sudo install -m 0644 deploy/labbeacon.service /etc/systemd/system/
 ```
 
 Optionally set `MQTT_USER=...` and `MQTT_PASSWORD=...` in
-`/etc/homelab-agent/environment`; these overrides lock the corresponding UI fields.
+`/etc/labbeacon/environment`; these overrides lock the corresponding UI fields.
 Then run `sudo systemctl daemon-reload` and
-`sudo systemctl enable --now homelab-agent`. The service user needs access to the
+`sudo systemctl enable --now labbeacon`. The service user needs access to the
 Docker socket group for Docker monitoring. VPN CLI queries require access to the
 respective local daemon sockets.
 
@@ -162,7 +166,7 @@ backups accordingly, and set referenced variables on any destination host.
 syncs it and atomically replaces the config. The resulting Linux file mode is
 `0600`. The service user needs write access to the config directory. Saves reject
 symlinks as the config file. The example systemd unit grants a writable config
-path at `/etc/homelab-agent`. An externally managed file can remain read-only;
+path at `/etc/labbeacon`. An externally managed file can remain read-only;
 overview, export and reload still work, but UI saves will fail.
 
 **Docker / upgrading from 0.2.0:** a single-file bind mount cannot be replaced
@@ -295,7 +299,7 @@ homeassistant/<component>/<AGENT_ID>/<sensor_key>/config   (QoS 1, retained)
 ```
 
 Every entity references the same device with `identifiers: [AGENT_ID]`, display
-name, manufacturer `homelab-agent` and build version. Sensor states are JSON:
+name, manufacturer `labbeacon` and build version. Sensor states are JSON:
 
 ```json
 {"value": 42.5, "attributes": {}}
@@ -363,7 +367,7 @@ go mod verify
 go vet ./...
 go test -race -count=1 ./...
 go build ./...
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/homelab-agent-arm64 ./cmd/homelab-agent
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/labbeacon-arm64 ./cmd/labbeacon
 ```
 
 The race detector requires a supported C toolchain; on Windows without one, use
@@ -395,6 +399,19 @@ exposes `ID()`, `Execute(ctx)` and `RequiresConfirm()`; `control.Entry` adds a n
 module, preflight and availability transition. The main loop serializes actions
 and collection cycles. Docker uses mockable API interfaces, CLI modules use a
 runner, and HTTP modules use replaceable clients.
+
+## Updating a server
+
+From the repository directory on the server:
+
+```sh
+git pull --ff-only
+docker compose up -d --build
+docker compose logs --tail=100 labbeacon
+```
+
+Keep a protected backup of `config-data/config.yaml` before upgrades. Configuration
+is stored outside the image and survives container rebuilds.
 
 ## Available modules
 

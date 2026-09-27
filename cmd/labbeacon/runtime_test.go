@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brendlij/labbeacon/internal/config"
+	"github.com/brendlij/labbeacon/internal/mqtt"
 	"go.yaml.in/yaml/v3"
-	"homelab-agent/internal/config"
-	"homelab-agent/internal/mqtt"
 )
 
 func TestWebReloadWhileBrokerOffline(t *testing.T) {
