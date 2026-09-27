@@ -67,6 +67,38 @@ mount **does not prevent Docker API writes**. The agent uses only GET requests b
 default. `control_containers.enabled: true` enables POST requests for start/stop/restart,
 subject to the control master switch. Socket access grants extensive host permissions.
 
+## Deploy with Komodo or another stack manager
+
+Use **UI Defined** in Komodo and paste [deploy/compose.ghcr.yaml](deploy/compose.ghcr.yaml)
+as the stack's Compose file. It pulls `ghcr.io/brendlij/labbeacon:0.3.0` instead of
+building from source. Save the stack configuration, then deploy it.
+
+First prepare the configuration **on the selected Docker server**, not inside the
+Komodo container:
+
+```sh
+sudo install -d -m 0700 /opt/labbeacon/config
+sudo curl -fsSL https://raw.githubusercontent.com/brendlij/labbeacon/main/configs/config.docker.example.yaml -o /opt/labbeacon/config/config.yaml
+sudo nano /opt/labbeacon/config/config.yaml
+sudo chown -R 65532:65532 /opt/labbeacon/config
+sudo chmod 700 /opt/labbeacon/config
+sudo chmod 600 /opt/labbeacon/config/config.yaml
+```
+
+Set `agent.id`, `agent.name`, the MQTT broker URL and any required credentials.
+The directory mount must be writable for atomic UI saves. Do not replace it with
+a read-only single-file mount. The image supports Linux amd64 and arm64.
+
+The default web UI remains bound to `127.0.0.1:8011` on the Docker host because the
+container uses host networking. Access it through the SSH tunnel described below.
+For explicit LAN access, configure `webui.bind_address`, username and password;
+Basic Auth over HTTP is not encrypted. No Compose `ports` mapping is needed with
+host networking. Docker monitoring requires the optional socket mount/group access.
+
+A missing stack Compose file and a missing LabBeacon `config.yaml` are separate
+problems: the stack manager needs the Compose definition, while the agent reads
+`/opt/labbeacon/config/config.yaml` through its directory mount.
+
 ## Quick start with the binary
 
 ```sh
