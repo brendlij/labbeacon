@@ -5,6 +5,30 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-27
+
+### Added
+- Module registry with configurable collector adapters and an optional action provider interface.
+- Explicitly opt-in host reboot/shutdown, systemd service start/stop/restart,
+  Docker container start/stop/restart and supervisor-managed agent restart.
+- Per-container allow/deny policy, read-only startup preflight and execution-time
+  target validation; no host/systemd control inside containers.
+- Structured action audit, bounded command queue, expiry/cooldown, per-connection
+  session nonces and retained/duplicate command rejection.
+- MQTT button discovery with stale-button cleanup and immediate refresh after actions.
+- Confirmed-action guard with a Home Assistant dashboard/script example (MQTT
+  discovery itself does not support confirmation dialogs).
+- Agent version/uptime; optional CPU temperatures, interval-based top CPU/RAM
+  processes, visible file descriptor totals, process count and boot timestamp.
+- Container stats and restart counts; optional cached anonymous registry digest comparison.
+- Optional interface IPs and cached public IP lookup.
+- Tests for authorization gates, command routing, graceful agent restart, stats,
+  registry updates and public IP caching.
+
+### Changed
+- Core collection uses the module registry; all remote control remains disabled by default.
+- Docker socket access is used for POST operations only after explicit control opt-in.
+
 ## [0.1.0] - 2026-09-27
 
 ### Added

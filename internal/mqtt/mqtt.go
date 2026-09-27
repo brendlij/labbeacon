@@ -2,16 +2,19 @@ package mqtt
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	paho "github.com/eclipse/paho.mqtt.golang"
 
 	"homelab-agent/internal/config"
+	"homelab-agent/internal/control"
 	"homelab-agent/internal/metric"
 	"homelab-agent/internal/version"
 )
@@ -27,13 +30,19 @@ type Publisher interface {
 	Publish(string, byte, bool, interface{}) paho.Token
 }
 type Client struct {
-	client paho.Client
-	cfg    config.Config
-	Wake   chan struct{}
+	controlMu sync.RWMutex
+	session   string
+	Commands  chan control.Request
+	buttons   map[string]bool
+	observed  map[string]bool
+	log       *slog.Logger
+	client    paho.Client
+	cfg       config.Config
+	Wake      chan struct{}
 }
 
 func New(cfg config.Config, log *slog.Logger) *Client {
-	c := &Client{cfg: cfg, Wake: make(chan struct{}, 1)}
+	c := &Client{cfg: cfg, Wake: make(chan struct{}, 1), Commands: make(chan control.Request, 8), buttons: map[string]bool{}, observed: map[string]bool{}, log: log}
 	opts := paho.NewClientOptions().AddBroker(cfg.MQTT.Broker).SetClientID("homelab-agent-"+cfg.Agent.ID).
 		SetUsername(cfg.MQTT.Username).SetPassword(cfg.MQTT.Password).
 		SetCleanSession(true).SetAutoReconnect(true).SetMaxReconnectInterval(30*time.Second).
@@ -42,13 +51,16 @@ func New(cfg config.Config, log *slog.Logger) *Client {
 		SetTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12}).
 		SetWill(cfg.Agent.ID+"/availability", "offline", 1, true)
 	opts.OnConnect = func(_ paho.Client) {
+		c.controlMu.Lock()
+		c.session = rand.Text()
+		c.controlMu.Unlock()
 		log.Info("MQTT connected")
 		select {
 		case c.Wake <- struct{}{}:
 		default:
 		}
 	}
-	opts.OnConnectionLost = func(_ paho.Client, err error) { log.Warn("MQTT disconnected", "error", err) }
+	opts.OnConnectionLost = func(_ paho.Client, err error) { c.RotateSession(); log.Warn("MQTT disconnected", "error", err) }
 	c.client = paho.NewClient(opts)
 	return c
 }

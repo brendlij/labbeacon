@@ -2,7 +2,7 @@
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=0.1.0-dev
+ARG VERSION=0.2.0-dev
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

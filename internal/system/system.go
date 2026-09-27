@@ -13,13 +13,16 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	gnet "github.com/shirou/gopsutil/v4/net"
 
+	"homelab-agent/internal/config"
 	"homelab-agent/internal/metric"
 )
 
 type Collector struct {
-	Paths    []string
-	previous map[string]gnet.IOCountersStat
-	last     time.Time
+	Options         config.System
+	processPrevious map[int32]processPoint
+	Paths           []string
+	previous        map[string]gnet.IOCountersStat
+	last            time.Time
 }
 
 func New(paths []string) *Collector { return &Collector{Paths: paths} }
@@ -81,6 +84,11 @@ func (c *Collector) Collect(ctx context.Context) ([]metric.Sample, error) {
 	}
 	h, e := host.InfoWithContext(ctx)
 	if check("host", e) {
+		if c.Options.BootTime {
+			s := metric.Sensor("boot_time", "Boot time", "", time.Unix(int64(h.BootTime), 0).UTC().Format(time.RFC3339))
+			s.DeviceClass = "timestamp"
+			out = append(out, s)
+		}
 		add("uptime", "Uptime", "s", h.Uptime)
 		add("hostname", "Hostname", "", h.Hostname)
 		add("os", "OS", "", h.OS)
@@ -102,6 +110,11 @@ func (c *Collector) Collect(ctx context.Context) ([]metric.Sample, error) {
 		}
 		c.previous = next
 		c.last = now
+	}
+	extra, err := c.extended(ctx)
+	out = append(out, extra...)
+	if err != nil {
+		errs = append(errs, err)
 	}
 	return out, errors.Join(errs...)
 }

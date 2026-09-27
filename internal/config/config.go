@@ -16,11 +16,12 @@ import (
 )
 
 type Agent struct {
-	ID           string        `yaml:"id"`
-	Name         string        `yaml:"name"`
-	PollInterval time.Duration `yaml:"poll_interval"`
-	ExpireAfter  time.Duration `yaml:"expire_after"`
-	LogLevel     string        `yaml:"log_level"`
+	MetricsEnabled bool          `yaml:"metrics_enabled"`
+	ID             string        `yaml:"id"`
+	Name           string        `yaml:"name"`
+	PollInterval   time.Duration `yaml:"poll_interval"`
+	ExpireAfter    time.Duration `yaml:"expire_after"`
+	LogLevel       string        `yaml:"log_level"`
 }
 type MQTT struct {
 	Broker          string `yaml:"broker"`
@@ -29,13 +30,21 @@ type MQTT struct {
 	DiscoveryPrefix string `yaml:"discovery_prefix"`
 }
 type System struct {
-	Enabled   bool     `yaml:"enabled"`
-	DiskPaths []string `yaml:"disk_paths"`
+	Enabled         bool     `yaml:"enabled"`
+	DiskPaths       []string `yaml:"disk_paths"`
+	Temperature     bool     `yaml:"temperature"`
+	Processes       bool     `yaml:"processes"`
+	TopN            int      `yaml:"top_n"`
+	FileDescriptors bool     `yaml:"file_descriptors"`
+	BootTime        bool     `yaml:"boot_time"`
 }
 type Docker struct {
-	Enabled    bool          `yaml:"enabled"`
-	SocketPath string        `yaml:"socket_path"`
-	Timeout    time.Duration `yaml:"timeout"`
+	Enabled           bool            `yaml:"enabled"`
+	SocketPath        string          `yaml:"socket_path"`
+	Timeout           time.Duration   `yaml:"timeout"`
+	Stats             bool            `yaml:"stats"`
+	ControlContainers ContainerPolicy `yaml:"control_containers"`
+	ImageUpdates      ImageUpdates    `yaml:"image_updates"`
 }
 type CLI struct {
 	Enabled bool          `yaml:"enabled"`
@@ -50,12 +59,15 @@ type Check struct {
 	Timeout        time.Duration `yaml:"timeout"`
 	Host           string        `yaml:"host"`
 	Port           int           `yaml:"port"`
+	SystemdUnit    string        `yaml:"systemd_unit"`
+	AllowControl   bool          `yaml:"allow_control"`
 }
 type Services struct {
 	Enabled bool    `yaml:"enabled"`
 	Checks  []Check `yaml:"checks"`
 }
 type Modules struct {
+	Network   Network  `yaml:"network"`
 	System    System   `yaml:"system"`
 	Docker    Docker   `yaml:"docker"`
 	Services  Services `yaml:"services"`
@@ -63,16 +75,20 @@ type Modules struct {
 	Netbird   CLI      `yaml:"netbird"`
 }
 type Config struct {
-	Agent   Agent   `yaml:"agent"`
-	MQTT    MQTT    `yaml:"mqtt"`
-	Modules Modules `yaml:"modules"`
+	HostControl  HostControl  `yaml:"host_control"`
+	AgentControl AgentControl `yaml:"agent_control"`
+	Agent        Agent        `yaml:"agent"`
+	MQTT         MQTT         `yaml:"mqtt"`
+	Modules      Modules      `yaml:"modules"`
 }
 
 func Defaults() Config {
-	return Config{Agent: Agent{PollInterval: 20 * time.Second, ExpireAfter: 60 * time.Second, LogLevel: "info"},
+	return Config{Agent: Agent{PollInterval: 20 * time.Second, ExpireAfter: 60 * time.Second, LogLevel: "info", MetricsEnabled: true},
 		MQTT: MQTT{DiscoveryPrefix: "homeassistant"}, Modules: Modules{
-			System: System{DiskPaths: []string{"/"}}, Docker: Docker{SocketPath: "/var/run/docker.sock", Timeout: 5 * time.Second},
-			Tailscale: CLI{Command: "tailscale", Timeout: 5 * time.Second}, Netbird: CLI{Command: "netbird", Timeout: 5 * time.Second}}}
+			System: System{DiskPaths: []string{"/"}, TopN: 5}, Docker: Docker{SocketPath: "/var/run/docker.sock", Timeout: 5 * time.Second, ImageUpdates: ImageUpdates{Interval: 6 * time.Hour, Timeout: 5 * time.Second}},
+			Network:   Network{LocalIPs: true, PublicIP: PublicIP{Endpoint: "https://api.ipify.org", Interval: 15 * time.Minute, Timeout: 5 * time.Second}},
+			Tailscale: CLI{Command: "tailscale", Timeout: 5 * time.Second}, Netbird: CLI{Command: "netbird", Timeout: 5 * time.Second}},
+		HostControl: HostControl{Timeout: 15 * time.Second, Reboot: CommandAction{Command: []string{"systemctl", "--no-ask-password", "reboot"}, Preflight: []string{"systemctl", "--no-ask-password", "show", "--property=Version", "--value"}, ConfirmRequired: true}, Shutdown: CommandAction{Command: []string{"systemctl", "--no-ask-password", "poweroff"}, Preflight: []string{"systemctl", "--no-ask-password", "show", "--property=Version", "--value"}, ConfirmRequired: true}}}
 }
 
 // Expand scalar values after parsing so secrets cannot inject YAML structure.
@@ -233,5 +249,5 @@ func (c Config) Validate() error {
 			}
 		}
 	}
-	return nil
+	return c.validateExtensions()
 }

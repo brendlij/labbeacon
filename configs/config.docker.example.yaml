@@ -4,6 +4,11 @@ agent:
   poll_interval: 20s
   expire_after: 60s
   log_level: info
+  metrics_enabled: true
+host_control:
+  enabled: false # Native Linux/systemd only; intentionally unavailable in Docker.
+agent_control:
+  enabled: false
 mqtt:
   broker: tcp://192.168.1.10:1883
   username: "${MQTT_USER}"
@@ -14,10 +19,24 @@ modules:
     enabled: true
     # Paths are in the container namespace; /hostfs is the host root mount.
     disk_paths: ["/hostfs"] # Example additional disk: /hostfs/mnt/data
+    temperature: false
+    processes: false
+    top_n: 5
+    file_descriptors: false
+    boot_time: false
   docker:
     enabled: false
     socket_path: /var/run/docker.sock
     timeout: 5s
+    stats: false
+    control_containers:
+      enabled: false
+      allow: []
+      deny: []
+    image_updates:
+      enabled: false
+      interval: 6h
+      timeout: 5s
   services:
     enabled: false
     checks: []
@@ -29,3 +48,11 @@ modules:
     enabled: false
     command: netbird
     timeout: 5s
+  network:
+    enabled: false
+    local_ips: true
+    public_ip:
+      enabled: false
+      endpoint: https://api.ipify.org
+      interval: 15m
+      timeout: 5s

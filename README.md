@@ -1,7 +1,7 @@
 # homelab-agent
 
 Ein kleines Go-Binary pro Server: Systemmetriken, Docker-Inventar und Service-Checks
-per MQTT an Home Assistant. Jeder Agent erscheint durch MQTT Discovery als eigenes
+per MQTT an Home Assistant, mit optionalen Steuerungsbuttons ab 0.2.0. Jeder Agent erscheint durch MQTT Discovery als eigenes
 Gerät. Linux ist die primäre Zielplattform; das Binary baut auch unter Windows.
 
 **Voraussetzungen:** erreichbarer MQTT-Broker, aktivierte MQTT-Integration in Home
@@ -56,13 +56,14 @@ docker compose up -d --build
 ```
 
 Bei Rootless Docker den Socketpfad und die Gruppenrechte anpassen. Ein Socket-Mount
-mit `:ro` verhindert **keine schreibenden Docker-API-Aufrufe**. Der Agent nutzt nur
-GET-Requests, aber Socket-Zugriff ist eine weitreichende Hostberechtigung.
+mit `:ro` verhindert **keine schreibenden Docker-API-Aufrufe**. Im Standardbetrieb
+nutzt der Agent nur GET-Requests. Erst `control_containers.enabled: true` schaltet
+POST-Aufrufe für start/stop/restart frei. Socket-Zugriff ist eine weitreichende Hostberechtigung.
 
 ## Schnellstart als Binary
 
 ```sh
-go build -trimpath -ldflags="-s -w -X homelab-agent/internal/version.Version=0.1.0" -o bin/homelab-agent ./cmd/homelab-agent
+go build -trimpath -ldflags="-s -w -X homelab-agent/internal/version.Version=0.2.0" -o bin/homelab-agent ./cmd/homelab-agent
 cp configs/config.example.yaml config.yaml
 export MQTT_USER=''
 export MQTT_PASSWORD=''
@@ -99,8 +100,9 @@ die jeweiligen lokalen Daemon-Sockets erreichbar sein.
 
 Eine YAML-Datei ist die Quelle der Konfiguration; Änderungen erfordern einen
 Neustart. Unbekannte Felder, mehrere YAML-Dokumente, ungültige IDs, unzulässige
-Check-Typen und fehlende Pflichtwerte werden beim Start abgelehnt. Alle Module sind
-im Code standardmäßig deaktiviert; die Beispieldateien aktivieren passende Module.
+Check-Typen und fehlende Pflichtwerte werden beim Start abgelehnt. Datenmodule sind
+im Code standardmäßig deaktiviert, außer den eigenen Versions-/Uptime-Sensoren;
+die Beispieldateien aktivieren passende Module. Alle Steuerungsfunktionen sind deaktiviert.
 
 | Schlüssel | Standard | Bedeutung |
 | --- | --- | --- |
@@ -141,7 +143,7 @@ Service-Felder:
 HTTP-Checks verwenden GET, prüfen genau den Statuscode und folgen keinen Redirects.
 TLS-Zertifikate werden geprüft. TCP-Checks prüfen den Verbindungsaufbau, nicht das
 Anwendungsprotokoll. Höchstens acht Services werden gleichzeitig geprüft. ICMP/Ping
-ist in 0.1.0 nicht implementiert; dadurch werden keine Raw-Socket-Rechte benötigt.
+ist in 0.2.0 nicht implementiert; dadurch werden keine Raw-Socket-Rechte benötigt.
 Module laufen parallel; ein Messdurchlauf hat maximal `poll_interval` Zeit. Bei
 vielen langsamen Checks Intervall und `expire_after` erhöhen. Nicht erhobene Werte
 werden nicht durch erfundene Nullwerte ersetzt, sondern laufen in HA ab.
@@ -298,19 +300,249 @@ verwendet die ID `integration` und schreibt Discovery/Availability auf diesem Br
 
 CI führt Build, Vet, Tests mit Race Detector, einen Mosquitto-Test und Linux-Cross-
 Builds aus; zusätzlich einen Windows-Build/Test und einen Container-Build. Tags wie
-`v0.1.0` lösen den Multi-Arch-Build (`linux/amd64`, `linux/arm64`) mit Push nach
+`v0.2.0` lösen den Multi-Arch-Build (`linux/amd64`, `linux/arm64`) mit Push nach
 `ghcr.io/<owner>/<repo>` aus. Erst nach einem erfolgreichen Workflow existiert dieses
 Image. Für öffentliche Nutzung ggf. die GHCR-Package-Sichtbarkeit auf public setzen.
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
-Architektur: `internal/metric.Collector` verbindet unabhängige Collector-Pakete mit
-MQTT. Docker verwendet ein mockbares API-Interface, CLI-Module ein Runner-Interface;
-HTTP-Clients können im Test ersetzt werden. `cmd/homelab-agent` kümmert sich um
-Konfiguration, Logging, Lebenszyklus und die parallelen Messzyklen.
+Architektur: `internal/module.Module` besitzt `Name()`, `Enabled()` und `Collect(ctx)`.
+`module.Registration` bindet die bestehenden Collector-Pakete an diese Schnittstelle;
+die Registry erledigt parallele Sammlung und Fehlerisolation. Ein neues Package
+benötigt nur einen Collector und einen Registrierungseintrag in `registered()`.
+Optionale `control.Provider` liefern dynamische Aktionen über `Actions(ctx)`.
+`control.Action` besitzt `ID()`, `Execute(ctx)` und `RequiresConfirm()`; `control.Entry`
+ergänzt Name, Modul, Vorprüfung und Availability-Übergang. Die Main-Loop serialisiert
+Steuerung und Messzyklen. Docker verwendet mockbare API-Interfaces, CLI-Module einen
+Runner und HTTP-Module austauschbare Clients.
+
+## Verfügbare Module
+
+Die Defaults beziehen sich auf Code-Defaults; Beispielconfigs aktivieren Systemmetriken.
+
+| Modul / Feature | Config-Schalter | Default | Benötigte Rechte / Voraussetzungen |
+| --- | --- | --- | --- |
+| System-Basis | `modules.system.enabled` | disabled | Lesbare Systeminformationen / Host-Mounts im Container |
+| CPU-Temperatur | `modules.system.temperature` | disabled | Lesbare hwmon-/Thermal-Sensoren, optional `HOST_SYS` |
+| Top-Prozesse + Prozesszahl | `modules.system.processes` | disabled | Prozessdaten lesen; nicht lesbare Prozesse werden gekennzeichnet |
+| Offene FDs + Prozesszahl | `modules.system.file_descriptors` | disabled | Zugriff auf Prozess-FD-Informationen; Linux bevorzugt |
+| Boot-Timestamp | `modules.system.boot_time` | disabled | Host-Bootinformationen |
+| Docker-Inventar + Restart-Count | `modules.docker.enabled` | disabled | Docker-Socket: GET `/containers/*` |
+| Docker CPU/RAM | `modules.docker.stats` | disabled | Zusätzlich GET `/containers/*/stats` |
+| Image-Update-Digest | `modules.docker.image_updates.enabled` | disabled | GET `/images/*`, HTTPS-Zugriff auf anonyme Registry |
+| HTTP/TCP-Checks | `modules.services.enabled` | disabled | Netzwerkzugriff zu den Zielen |
+| Tailscale / NetBird | jeweiliges `enabled` | disabled | CLI und lokaler Daemon erreichbar |
+| Netzwerk-IP-Adressen | `modules.network.enabled` | disabled | Netzwerkschnittstellen lesbar |
+| Lokale IPs | `modules.network.local_ips` | enabled innerhalb Netzwerkmodul | Im Container Host-Netzwerk für Host-IPs |
+| Öffentliche IP | `modules.network.public_ip.enabled` | disabled | Ausgehendes HTTPS zum konfigurierten Endpoint |
+| Agent-Version/Uptime | `agent.metrics_enabled` | enabled | Keine zusätzlichen Rechte |
+
+Alle System-Erweiterungen benötigen zusätzlich `modules.system.enabled: true`.
+`top_n` begrenzt die beiden Attributlisten `top_cpu` und `top_ram` (Standard 5,
+zulässig 1–100). Es gibt einen Summary-Sensor, keine Entity pro Prozess. CPU-Raten
+verwenden die Differenz zweier Prozessmessungen; die erste CPU-Liste ist daher leer.
+100 % entspricht einem logischen Kern, mehrkernige Prozesse können darüber liegen.
+PID-Wiederverwendung wird anhand der Prozess-Startzeit erkannt. RAM ist RSS in Bytes.
+Dateideskriptoren sind die Summe über lesbare Prozesse; Attribute `partial`,
+`observed_processes` und `total_processes` zeigen eingeschränkte Sichtbarkeit an.
+Der Agent eskaliert keine Rechte für Prozessmetriken. `hidepid` und Container-
+Namespaces können bereits die sichtbare Prozessliste einschränken.
+
+`cpu_temperature` zeigt den höchsten erkannten CPU-Sensorwert; Einzelwerte liegen
+als Attribute vor. Unter Linux wird bei Bedarf `/sys/class/thermal` bzw. `HOST_SYS`
+verwendet. Ohne lesbaren CPU-Sensor erscheint kein erfundener Wert. `boot_time` ist
+ein UTC-Timestamp mit HA-Geräteklasse `timestamp`; `agent_uptime` zählt unabhängig
+davon seit Prozessstart.
+
+Container-Stats ergänzen die Inventarattribute und erzeugen CPU-/RAM-Sensoren je
+Container. CPU verwendet Docker-CPU-/Systemzeitdifferenzen und Online-Kernanzahl;
+RAM zieht `inactive_file` bzw. `total_inactive_file` ab. Ohne gültiges CPU-Zeitpaar
+wird kein CPU-Wert gesendet. Stats werden nur für laufende Container abgefragt.
+`restart_count` stammt aus Docker Inspect und ist der Docker-eigene Zähler; er ist
+kein vollständiges Audit aller manuellen Stop/Start-Vorgänge. Stats können pro
+Container etwa eine Sekunde benötigen: bei vielen Containern `docker.timeout`,
+`poll_interval` und `expire_after` entsprechend erhöhen. Fehler einer Stats-Abfrage
+verwerfen nicht das zuvor gelesene Inventar.
+
+Image-Updates werden standardmäßig höchstens alle `6h` mit `5s` Timeout geprüft.
+Verglichen werden lokale RepoDigests mit einem anonym per HTTPS gelesenen
+Schema-2-/OCI-Manifest und ggf. dessen Plattform-Deskriptoren. Ein lokaler Digest in
+einer Manifestliste bedeutet „kein Update für dieses Image“. Authentifizierung,
+Bearer-Token-Flows und Credentials werden nicht verwendet: 401/403/404, ungetaggte
+Image-IDs, digest-gepinnte Referenzen oder fehlende RepoDigests werden übersprungen.
+Das betrifft auch öffentliche Registries, die einen anonymen Bearer-Token verlangen
+(häufig Docker Hub/GHCR). Der Agent zieht oder aktualisiert keine Images.
+
+Das Netzwerkmodul veröffentlicht pro Interface einen Sensor mit Anzahl der Adressen
+und vollständiger CIDR-Liste in `addresses`. `public_ip.endpoint` ist standardmäßig
+`https://api.ipify.org`, `interval: 15m`, `timeout: 5s`; Intervalle unter einer Minute
+sind unzulässig. Der Endpoint muss eine einzelne IP als Text liefern. Der Cache
+wird zwischen Polls wiederverwendet; `checked_at` enthält den letzten erfolgreichen
+Abruf. Nach einem fehlgeschlagenen Refresh wird kein alter Wert weiterveröffentlicht;
+HA lässt den Sensor ablaufen. Der nächste Versuch erfolgt nach dem Cacheintervall.
+
+## Verfügbare Steuerungsaktionen
+
+| Aktion | Modul / Freigabe | Default | Benötigte Berechtigungen |
+| --- | --- | --- | --- |
+| Host reboot | `host_control.enabled` + `reboot.enabled` | disabled | Nativer Linux-systemd-Host, root, Systembus/Manager und konfiguriertes Programm |
+| Host shutdown | `host_control.enabled` + `shutdown.enabled` | disabled | Wie Reboot |
+| Container start/stop/restart | `modules.docker.control_containers.enabled` | disabled | Linux-Docker-Socket mit GET- und passenden POST-Rechten |
+| Service start/stop/restart | je Check `allow_control: true` + `systemd_unit` | disabled | Nativer Linux-systemd-Host, root, geladene exakte `.service`-Unit |
+| Agent Restart | `agent_control.enabled` | disabled | Supervisor mit Restart-on-failure oder Docker-Restart-Policy |
+
+Die Standard-systemd-Unit läuft weiter als unprivilegierter Benutzer und ermöglicht
+keine Host-/Service-Steuerung. Für diese Funktionen muss der Administrator die Unit
+bewusst anpassen (z. B. systemd-Drop-in mit `User=root` und `Group=root`). Der Agent
+ruft weder sudo noch interaktive Polkit-Abfragen auf. Host-/systemd-Steuerung wird
+unter Windows und in erkannten Containern deaktiviert; ein bloßes `pid: host` oder
+ein gemounteter Socket aktiviert sie nicht. Docker-Containersteuerung funktioniert
+hingegen im normalen Agent-Container bei entsprechendem Socketzugriff.
+
+Vor der Registrierung werden Programme, Host/systemd-Voraussetzungen, geladene
+Units bzw. Socket-Erreichbarkeit read-only geprüft. Vor jeder Ausführung erfolgen
+erneute Unit-/Zielprüfungen. Unverfügbare Aktionen werden geloggt. Docker-Authorization-
+Plugins oder sich ändernde Systembus-Richtlinien können GET erlauben und POST später
+ablehnen; eine garantiert vollständige Schreibrechteprüfung wäre selbst eine Mutation.
+Solche Fehler werden bei Ausführung strukturiert protokolliert, ohne automatischen
+Retry. Timeouts können bedeuten, dass eine bereits angenommene Aktion dennoch läuft.
+
+### Freigaben konfigurieren
+
+```yaml
+host_control:
+  enabled: false
+  timeout: 15s
+  reboot:
+    enabled: false
+    command: [systemctl, --no-ask-password, reboot]
+    preflight: [systemctl, --no-ask-password, show, --property=Version, --value]
+    confirm_required: true
+  shutdown:
+    enabled: false
+    command: [systemctl, --no-ask-password, poweroff]
+    preflight: [systemctl, --no-ask-password, show, --property=Version, --value]
+    confirm_required: true
+agent_control:
+  enabled: false
+```
+
+`command` und `preflight` sind Argumentlisten ohne implizite Shell; `preflight` muss
+ein **nur lesender** Test sein. Beide kommen ausschließlich aus der vertrauenswürdigen
+lokalen Config, nie aus einem MQTT-Payload. Beispiel für gezielte Containerfreigabe
+innerhalb des bereits aktivierten Docker-Moduls:
+
+```yaml
+control_containers:
+  enabled: true
+  allow: [herbst, adguard]
+  deny: [postgres]
+```
+
+Eine leere Allowlist erlaubt nach Aktivierung alle Namen; Deny hat immer Vorrang.
+Es sind exakte Docker-Namen ohne führenden Slash, keine Globmuster. Die Buttons
+verwenden unveränderliche Container-IDs als Ziele; eine neue Instanz mit gleichem
+Namen erhält neue Buttons. Ein Namenswechsel nach Discovery wird vor Ausführung
+abgelehnt, bis das Inventar aktualisiert wurde.
+
+Für einen Service-Check `systemd_unit: adguard.service` und `allow_control: true`
+ergänzen. Service-Name und Unit sind getrennte Felder. Die Unit darf keine Optionen,
+Pfade oder Wildcards enthalten. Docker-/Service-Aktionen haben ein 30s-Zeitbudget,
+Hostaktionen `host_control.timeout`. Docker stop/restart verwendet 10s Grace-Zeit.
+Erfolgreiche Aktionen lösen sofort einen neuen Mess-/Discovery-Zyklus aus.
+
+Agent Restart beendet den Prozess nach MQTT-Offline und Disconnect mit **Exitcode
+75**. Die mitgelieferten systemd-/Compose-Restart-Regeln starten ihn erneut und lesen
+die Config neu. Ohne Supervisor bleibt der Prozess beendet. Eine geänderte, ungültige
+Config verhindert den Neustart; deshalb vorher `-check-config` verwenden.
+
+### MQTT-Kommandos und Audit
+
+Button-Discovery: `homeassistant/button/<ID>/<action_id>/config`.
+Command-Topic: `<ID>/button/<action_id>/command`, QoS 0, **nicht retained**.
+Buttons teilen das Monitoring-Device; `expire_after` gilt nur für Sensoren,
+Button-Verfügbarkeit über das gemeinsame Availability-Topic.
+
+```json
+{"session":"aktueller-Wert-aus-Discovery","confirm":false}
+```
+
+Der Agent rotiert `session` bei MQTT-Verbindungswechseln und nach jedem begonnenen
+Steuerungsversuch, auch bei Ausführungsfehlern. Die aktuelle Session steht im Discovery-`payload_press`, im
+Attribut `control_session` des Agent-Version-Sensors und als JSON unter
+`<ID>/control/session`. Sie ist ein Schutz gegen veraltete Nachrichten, **kein
+geheimes Authentifizierungsmerkmal**. Retained-Replays, DUP-Pakete, ungültiges JSON,
+Payloads über 512 Bytes, alte Sessions und Befehle ohne freigeschaltete Aktion werden
+verworfen. Die Queue fasst acht Befehle; nach 15s Wartezeit verfallen sie. Gleiche
+Aktionen haben 2s Cooldown. Befehle und Messzyklen werden serialisiert.
+
+Audit-Logs enthalten Zeit, Aktion, Topic, QoS, Beginn und Ergebnis/Ablehnungsgrund.
+MQTT 3.1.1 leitet keine Identität des Publishers an Subscriber weiter; `actor` wird
+deshalb ehrlich als unbekannt ausgewiesen. Authentifizierung/Autorisierung muss am
+Broker erfolgen: nur vertrauenswürdigen HA-/Admin-Clients Schreibrechte auf
+`<ID>/button/+/command` geben, TLS einsetzen und Broker-Logs für Benutzerzuordnung
+verwenden. Der Agent benötigt Schreibrechte auf eigene State-/Discovery-Topics,
+Leserechte auf eigene Button-Discovery zur Bereinigung und bei Steuerung auf
+eigene Command-Topics. Bestätigung ersetzt diese ACLs nicht.
+
+Vor Hostaktionen wird `rebooting` bzw. `shutting_down` auf Availability bestätigt
+publiziert. Bei einem Befehlsfehler wird `online` wiederhergestellt; beim erfolgreichen
+Herunterfahren des Agent folgt `offline`. HA-MQTT-Topic-Überwachung zeigt die
+Übergangsnachrichten; ein automatischer HA-Logbook-Eintrag ist dadurch nicht garantiert.
+
+Veraltete **Button**-Discovery wird automatisch bereinigt, auch nach Neustarts mit
+deaktivierter Steuerung (ggf. im folgenden Poll). Sensor-Discovery bleibt gemäß dem
+oben beschriebenen manuellen Bereinigungsverfahren erhalten. Docker-Inventarfehler
+nehmen Docker-Buttons vorsichtshalber vorübergehend aus der Discovery.
+
+### Bestätigung gefährlicher Aktionen in Home Assistant
+
+**MQTT-Discovery hat kein `confirmation`-Feld.** Bestätigungsdialoge sind eine
+[Dashboard-Aktion](https://www.home-assistant.io/dashboards/actions), keine Eigenschaft
+der [MQTT-Button-Integration](https://www.home-assistant.io/integrations/button.mqtt/).
+`confirm_required: true` wird deshalb im Agent durchgesetzt: der normale
+`button.press`-Payload bestätigt nichts und wird abgelehnt. Verwende stattdessen
+dieses HA-Script in `scripts.yaml` (ID/Entity-Namen anpassen, `agent.metrics_enabled`
+aktiv lassen):
+
+```yaml
+homelab_srv01_reboot:
+  alias: Server 1 neu starten
+  mode: single
+  sequence:
+    - action: mqtt.publish
+      data:
+        topic: srv-01/button/host_reboot/command
+        qos: 0
+        retain: false
+        payload: >-
+          {{ {'session': state_attr('sensor.srv_01_agent_version', 'control_session'),
+              'confirm': true} | to_json }}
+```
+
+Dashboard-Karte mit nativem Bestätigungsdialog:
+
+```yaml
+type: button
+name: Server 1 neu starten
+icon: mdi:restart
+tap_action:
+  action: perform-action
+  perform_action: script.homelab_srv01_reboot
+  confirmation:
+    text: Server 1 wirklich neu starten?
+hold_action:
+  action: none
+```
+
+Für Shutdown analog `host_shutdown` verwenden. Die Bestätigung gilt für diese
+Dashboard-Karte; direkte Script-/MQTT-Aufrufe können keinen menschlichen Klick
+beweisen und müssen über HA-Rechte/Broker-ACLs geschützt werden. Mit
+`confirm_required: false` funktioniert der entdeckte Button direkt ohne Dialog.
+Der Agent gibt niemals automatisch `confirm: true` in Discovery vor.
 
 ### Quellen der Protokollimplementierung
 

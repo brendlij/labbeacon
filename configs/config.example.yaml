@@ -4,6 +4,22 @@ agent:
   poll_interval: 20s
   expire_after: 60s
   log_level: info
+  metrics_enabled: true
+host_control:
+  enabled: false
+  timeout: 15s
+  reboot:
+    enabled: false
+    command: [systemctl, --no-ask-password, reboot]
+    preflight: [systemctl, --no-ask-password, show, --property=Version, --value]
+    confirm_required: true
+  shutdown:
+    enabled: false
+    command: [systemctl, --no-ask-password, poweroff]
+    preflight: [systemctl, --no-ask-password, show, --property=Version, --value]
+    confirm_required: true
+agent_control:
+  enabled: false # Needs systemd Restart=on-failure or a container restart policy.
 mqtt:
   broker: tcp://192.168.1.10:1883
   username: "${MQTT_USER}"
@@ -13,10 +29,24 @@ modules:
   system:
     enabled: true
     disk_paths: ["/"] # Add /mnt/data or other mounts here.
+    temperature: false
+    processes: false
+    top_n: 5
+    file_descriptors: false
+    boot_time: false
   docker:
     enabled: false
     socket_path: /var/run/docker.sock
     timeout: 5s
+    stats: false # Increase timeout for many containers (stats can take ~1s each).
+    control_containers:
+      enabled: false
+      allow: [] # Empty: all names, but only when control is explicitly enabled.
+      deny: []  # Deny takes precedence, exact names without leading slash.
+    image_updates:
+      enabled: false
+      interval: 6h
+      timeout: 5s
   services:
     enabled: true
     checks:
@@ -25,6 +55,8 @@ modules:
         url: http://192.168.1.10:3000
         expected_status: 200
         timeout: 5s
+        systemd_unit: adguard.service
+        allow_control: false
       - name: Herbst Dashboard
         type: tcp
         host: 192.168.1.10
@@ -38,3 +70,11 @@ modules:
     enabled: false
     command: netbird
     timeout: 5s
+  network:
+    enabled: false
+    local_ips: true
+    public_ip:
+      enabled: false
+      endpoint: https://api.ipify.org
+      interval: 15m
+      timeout: 5s

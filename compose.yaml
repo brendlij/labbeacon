@@ -4,7 +4,7 @@ services:
     build:
       context: .
       args:
-        VERSION: 0.1.0
+        VERSION: 0.2.0
     image: homelab-agent:local
     restart: unless-stopped
     network_mode: host
