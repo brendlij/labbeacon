@@ -5,6 +5,9 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Standardized the web UI, status/error messages, README and documentation examples on English.
+
 ## [0.3.0] - 2026-09-27
 
 ### Added

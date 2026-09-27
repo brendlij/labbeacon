@@ -127,7 +127,7 @@ func (s *Server) secure(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'")
 		if !s.hostAllowed(r.Host) {
-			http.Error(w, "Nicht erlaubter Hostname.", http.StatusForbidden)
+			http.Error(w, "Hostname not allowed.", http.StatusForbidden)
 			return
 		}
 		if s.Settings.Username != "" {
@@ -138,14 +138,14 @@ func (s *Server) secure(next http.Handler) http.Handler {
 			ep := sha256.Sum256([]byte(s.Settings.Password))
 			if !ok || subtle.ConstantTimeCompare(u[:], eu[:])&subtle.ConstantTimeCompare(p[:], ep[:]) != 1 {
 				w.Header().Set("WWW-Authenticate", `Basic realm="homelab-agent", charset="UTF-8"`)
-				http.Error(w, "Anmeldung erforderlich.", http.StatusUnauthorized)
+				http.Error(w, "Authentication required.", http.StatusUnauthorized)
 				return
 			}
 		}
 		if r.Method == http.MethodPost {
 			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 			if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
-				http.Error(w, "Fremder Ursprung.", http.StatusForbidden)
+				http.Error(w, "Cross-origin request denied.", http.StatusForbidden)
 				return
 			}
 			if origin := r.Header.Get("Origin"); origin != "" {
@@ -155,18 +155,18 @@ func (s *Server) secure(next http.Handler) http.Handler {
 					scheme = "https"
 				}
 				if err != nil || u.Host != r.Host || u.Scheme != scheme {
-					http.Error(w, "Fremder Ursprung.", http.StatusForbidden)
+					http.Error(w, "Cross-origin request denied.", http.StatusForbidden)
 					return
 				}
 			}
 			if err := r.ParseForm(); err != nil {
-				http.Error(w, "Formular zu groß oder ungültig.", http.StatusBadRequest)
+				http.Error(w, "Form is too large or invalid.", http.StatusBadRequest)
 				return
 			}
 			cookie, err := r.Cookie(s.cookieName())
 			token := r.PostForm.Get("csrf")
 			if err != nil || !s.validToken(token) || !hmac.Equal([]byte(cookie.Value), []byte(token)) {
-				http.Error(w, "CSRF-Prüfung fehlgeschlagen. Seite neu laden.", http.StatusForbidden)
+				http.Error(w, "CSRF check failed. Reload the page.", http.StatusForbidden)
 				return
 			}
 		}
@@ -184,7 +184,7 @@ func (s *Server) render(w http.ResponseWriter, name string, p page) {
 	var b bytes.Buffer
 	if err := s.templates.ExecuteTemplate(&b, name, p); err != nil {
 		s.Log.Error("web template failed", "error", err)
-		http.Error(w, "Darstellung fehlgeschlagen.", 500)
+		http.Error(w, "Page rendering failed.", 500)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -194,15 +194,15 @@ func (s *Server) render(w http.ResponseWriter, name string, p page) {
 }
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 	p := s.base(w, r)
-	p.Title = "Übersicht"
+	p.Title = "Overview"
 	s.render(w, "overview", p)
 }
 func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 	p := s.base(w, r)
-	p.Title = "Einstellungen"
+	p.Title = "Settings"
 	doc, err := s.Store.Read()
 	if err != nil {
-		http.Error(w, "Konfiguration konnte nicht gelesen werden. Server-Log prüfen.", 500)
+		http.Error(w, "Could not read configuration. Check the server log.", 500)
 		s.Log.Warn("web config read failed", "error", err)
 		return
 	}
@@ -212,9 +212,9 @@ func (s *Server) form(w http.ResponseWriter, r *http.Request) {
 	p.Containers = containerChoices(doc.Config, p.State.Containers)
 	switch r.URL.Query().Get("saved") {
 	case "1":
-		p.Message = "Gespeichert. Live-Änderungen werden nach dem laufenden Messzyklus übernommen."
+		p.Message = "Saved. Live changes will apply after the current collection cycle."
 	case "reload":
-		p.Message = "Reload angefordert. Live-Änderungen werden nach dem laufenden Messzyklus übernommen."
+		p.Message = "Reload requested. Live changes will apply after the current collection cycle."
 	}
 	s.render(w, "settings", p)
 }
@@ -226,7 +226,7 @@ func (s *Server) save(w http.ResponseWriter, r *http.Request) {
 	defer s.saveMu.Unlock()
 	doc, err := s.Store.Read()
 	if err != nil {
-		s.failure(w, fmt.Errorf("Konfiguration nicht lesbar"), 500)
+		s.failure(w, fmt.Errorf("Could not read configuration"), 500)
 		return
 	}
 	if r.PostForm.Get("revision") != doc.Revision {
@@ -239,7 +239,7 @@ func (s *Server) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if (Dangerous(doc.Config, next) || Dangerous(s.State.View().Active, next)) && r.PostForm.Get("ack_danger") != "yes" {
-		s.failure(w, fmt.Errorf("Host-Steuerung oder Bestätigungsregeln geändert: zusätzliche Bestätigung erforderlich"), 400)
+		s.failure(w, fmt.Errorf("Host control or confirmation requirements changed: explicit acknowledgment required"), 400)
 		return
 	}
 	saved, err := s.Store.Save(doc.Revision, next)
@@ -260,11 +260,11 @@ func (s *Server) reload(w http.ResponseWriter, r *http.Request) {
 	defer s.saveMu.Unlock()
 	doc, err := s.Store.Read()
 	if err != nil {
-		s.failure(w, fmt.Errorf("Reload fehlgeschlagen: Konfiguration nicht lesbar oder ungültig"), 400)
+		s.failure(w, fmt.Errorf("Reload failed: configuration is unreadable or invalid"), 400)
 		return
 	}
 	if Dangerous(s.State.View().Active, doc.Config) && r.PostForm.Get("ack_danger") != "yes" {
-		s.failure(w, fmt.Errorf("Reload würde Host-Steuerung oder Bestätigungsregeln ändern: zusätzliche Bestätigung erforderlich"), 400)
+		s.failure(w, fmt.Errorf("Reload would change host control or confirmation requirements: explicit acknowledgment required"), 400)
 		return
 	}
 	s.State.Submit(doc.Config)
@@ -274,7 +274,7 @@ func (s *Server) reload(w http.ResponseWriter, r *http.Request) {
 func (s *Server) export(w http.ResponseWriter, r *http.Request) {
 	doc, err := s.Store.Read()
 	if err != nil {
-		http.Error(w, "Export fehlgeschlagen.", 500)
+		http.Error(w, "Export failed.", 500)
 		return
 	}
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")

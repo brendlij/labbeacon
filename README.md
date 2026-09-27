@@ -1,26 +1,27 @@
 # homelab-agent
 
-Ein kleines Go-Binary pro Server: Systemmetriken, Docker-Inventar und Service-Checks
-per MQTT an Home Assistant, mit optionalen Steuerungsbuttons und eingebauter Web-UI ab 0.3.0. Jeder Agent erscheint durch MQTT Discovery als eigenes
-Gerät. Linux ist die primäre Zielplattform; das Binary baut auch unter Windows.
+A small Go binary per server: system metrics, Docker inventory and service checks
+sent to Home Assistant over MQTT, with optional control buttons and an embedded
+web UI as of 0.3.0. Each agent appears as a separate device through MQTT Discovery.
+Linux is the primary target; the binary also builds on Windows.
 
-**Voraussetzungen:** erreichbarer MQTT-Broker, aktivierte MQTT-Integration in Home
-Assistant und Go 1.25+ oder Docker Engine mit Compose auf dem Linux-Host. Der Agent
-installiert weder einen Broker noch Home Assistant. Noch kein öffentliches Image?
-Das Compose-Beispiel baut direkt aus dem geklonten Repository.
+**Requirements:** a reachable MQTT broker, the MQTT integration enabled in Home
+Assistant, and Go 1.25+ or Docker Engine with Compose on the Linux host. The agent
+does not install a broker or Home Assistant. The Compose example builds directly
+from the cloned repository, so a published image is not required.
 
-> Screenshot-Platzhalter: Home-Assistant-Gerät „Server 1“ mit gruppierten Sensoren.
-> Screenshot-Platzhalter: Dashboard mit CPU, RAM, Netzwerk und Service-Verfügbarkeit.
+> Screenshot placeholder: Home Assistant device “Server 1” with grouped sensors.
+> Screenshot placeholder: dashboard with CPU, RAM, network and service availability.
 
-## Schnellstart mit Docker (Linux)
+## Quick start with Docker (Linux)
 
-Im geklonten Repository:
+From the cloned repository:
 
 ```sh
 mkdir -p config-data
 cp configs/config.docker.example.yaml config-data/config.yaml
-# config-data/config.yaml: agent.id, agent.name und mqtt.broker eintragen.
-# Für atomare UI-Saves braucht die Container-UID Schreibrechte am Verzeichnis:
+# Set agent.id, agent.name and mqtt.broker in config-data/config.yaml.
+# Atomic UI saves require directory write access for the container UID:
 sudo chown -R 65532:65532 config-data
 sudo chmod 700 config-data
 sudo chmod 600 config-data/config.yaml
@@ -29,59 +30,58 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-Das Gerät erscheint unter **Einstellungen → Geräte & Dienste → MQTT**. Die erste
-Netzwerk-Durchsatzmessung kommt im zweiten Messzyklus. Für weitere Server dieselben
-Schritte mit einer anderen `agent.id` wiederholen. IDs müssen brokerweit eindeutig
-und dauerhaft sein; doppelte IDs führen zu MQTT-Verbindungsabbrüchen und vermischten
-Geräten.
+The device appears under **Settings → Devices & services → MQTT**. The first
+network throughput measurement arrives in the second collection cycle. Repeat
+with a different `agent.id` for each server. IDs must be unique across the broker
+and remain stable; duplicate IDs cause disconnections and mixed device data.
 
-Compose bindet den Host unter `/hostfs` ein, setzt die gopsutil-Variablen `HOST_PROC`,
-`HOST_SYS`, `HOST_ETC`, `HOST_VAR`, `HOST_RUN` und teilt Netzwerk-, PID- und
-UTS-Namensraum. Damit beziehen sich die Werte auf den Linux-Host. Zusätzliche
-Datenträger als `/hostfs/mnt/data` in `disk_paths` ergänzen. Der Bind-Mount verwendet
-`rslave`, damit Host-Mounts bei passender Mount-Propagation sichtbar werden.
-Docker Desktop zeigt die Linux-VM, nicht das Windows-/macOS-Hostsystem.
+Compose mounts the host at `/hostfs`, sets the gopsutil variables `HOST_PROC`,
+`HOST_SYS`, `HOST_ETC`, `HOST_VAR` and `HOST_RUN`, and shares the network, PID and
+UTS namespaces. Metrics therefore describe the Linux host. Add disks to
+`disk_paths`, for example `/hostfs/mnt/data`. The bind mount uses `rslave` so host
+mounts become visible when mount propagation is configured appropriately.
+Docker Desktop reports its Linux VM, not the Windows/macOS host.
 
-Der Container läuft als UID/GID 65532 ohne Linux-Capabilities. Die Config muss für
-diese UID lesbar und für UI-Saves samt Verzeichnis schreibbar sein. Die eingebundenen Host-Verzeichnisse gewähren Lesezugriff auf
-Hostdaten; das ist ein Monitoring-Container für vertrauenswürdige Hosts.
+The container runs as UID/GID 65532 without Linux capabilities. This UID must be
+able to read the config and, for UI saves, write both the file and its directory.
+The host mounts grant read access to host data; use this container on trusted hosts.
 
-### Docker-Inventar aktivieren
+### Enable Docker inventory
 
-1. `modules.docker.enabled: true` setzen.
-2. Unter `volumes` in `compose.yaml` ergänzen:
-   `/var/run/docker.sock:/var/run/docker.sock:ro` (als YAML-Listeneintrag).
-3. `group_add: ["${DOCKER_GID}"]` aktivieren und starten:
+1. Set `modules.docker.enabled: true`.
+2. Add `/var/run/docker.sock:/var/run/docker.sock:ro` as a YAML list entry under
+   `volumes` in `compose.yaml`.
+3. Enable `group_add: ["${DOCKER_GID}"]` and start:
 
 ```sh
 export DOCKER_GID=$(stat -c %g /var/run/docker.sock)
 docker compose up -d --build
 ```
 
-Bei Rootless Docker den Socketpfad und die Gruppenrechte anpassen. Ein Socket-Mount
-mit `:ro` verhindert **keine schreibenden Docker-API-Aufrufe**. Im Standardbetrieb
-nutzt der Agent nur GET-Requests. Erst `control_containers.enabled: true` schaltet
-POST-Aufrufe für start/stop/restart frei. Socket-Zugriff ist eine weitreichende Hostberechtigung.
+For rootless Docker, adjust the socket path and group permissions. A `:ro` socket
+mount **does not prevent Docker API writes**. The agent uses only GET requests by
+default. `control_containers.enabled: true` enables POST requests for start/stop/restart,
+subject to the control master switch. Socket access grants extensive host permissions.
 
-## Schnellstart als Binary
+## Quick start with the binary
 
 ```sh
 go build -trimpath -ldflags="-s -w -X homelab-agent/internal/version.Version=0.3.0" -o bin/homelab-agent ./cmd/homelab-agent
 cp configs/config.example.yaml config.yaml
-# Config bearbeiten: Broker, ID, Pfade und die Beispiel-Service-Checks anpassen.
+# Configure the broker, ID, paths and example service checks.
 ./bin/homelab-agent -config config.yaml -check-config
 ./bin/homelab-agent -config config.yaml
 ```
 
-`-version` zeigt die Build-Version. `SIGINT`/`SIGTERM` beendet laufende Checks,
-publiziert bestmöglich `offline` und trennt MQTT. Unter Windows funktionieren
-System- und HTTP/TCP-Checks; Diskpfade z. B. auf `C:\` setzen. Load Average kann dort
-nicht verfügbar sein. Der Docker-Collector unterstützt Unix-Sockets, keine
-Windows-Named-Pipes. Linux ist für Container-Deployment und systemd vorgesehen.
+`-version` prints the build version. `SIGINT`/`SIGTERM` cancels ongoing checks,
+announces `offline` on a best-effort basis and disconnects MQTT. System and HTTP/TCP
+checks work on Windows; use disk paths such as `C:\`. Load average may be unavailable
+there. The Docker collector supports Unix sockets, not Windows named pipes.
+Container deployment and systemd support target Linux.
 
 ### systemd
 
-Eine Unit liegt in `deploy/homelab-agent.service`. Beispielinstallation nach dem Build:
+A unit is provided in `deploy/homelab-agent.service`. Installation after building:
 
 ```sh
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin homelab-agent
@@ -91,24 +91,26 @@ sudo install -m 0600 -o homelab-agent -g homelab-agent config.yaml /etc/homelab-
 sudo install -m 0644 deploy/homelab-agent.service /etc/systemd/system/
 ```
 
-Optional in `/etc/homelab-agent/environment` `MQTT_USER=...` und `MQTT_PASSWORD=...`
-ablegen (diese ENV-Overrides sperren die entsprechenden UI-Felder), dann `sudo systemctl daemon-reload` und
-`sudo systemctl enable --now homelab-agent` ausführen. Für das Docker-Modul benötigt
-der Dienstbenutzer Zugriff auf die Docker-Socket-Gruppe. Für VPN-CLI-Abfragen müssen
-die jeweiligen lokalen Daemon-Sockets erreichbar sein.
+Optionally set `MQTT_USER=...` and `MQTT_PASSWORD=...` in
+`/etc/homelab-agent/environment`; these overrides lock the corresponding UI fields.
+Then run `sudo systemctl daemon-reload` and
+`sudo systemctl enable --now homelab-agent`. The service user needs access to the
+Docker socket group for Docker monitoring. VPN CLI queries require access to the
+respective local daemon sockets.
 
-## Web-UI
+## Web UI
 
-Nach dem Start unter **http://127.0.0.1:8011/** erreichbar, auch wenn MQTT gerade
-nicht verbunden ist. Übersicht und MQTT-/Modulstatus aktualisieren sich alle fünf
-Sekunden. Grün bedeutet erfolgreiche Sammlung, rot einen Fehler; deaktivierte oder
-noch nicht geprüfte Module bleiben grau. Fehlgeschlagene einzelne Service-Checks
-sind reguläre Messergebnisse; die Modulampel zeigt die Sammlung, nicht die Erreichbarkeit
-jedes Ziels. Die Settings bieten Modulschalter, MQTT-Felder, einen HTTP/TCP-Service-Editor
-und Docker-Allow-/Deny-Checklisten aus dem letzten erfolgreichen Inventar.
+Open **http://127.0.0.1:8011/** after startup, even while MQTT is disconnected.
+The overview refreshes module and MQTT status every five seconds. Green indicates
+successful collection, red indicates an error, and disabled modules or modules
+awaiting their first collection are gray. Individual failed service checks are
+valid measurements: the module indicator reports collection health, not whether
+every target is reachable. Settings include module switches, MQTT fields, an
+HTTP/TCP service editor and Docker allow/deny checklists based on the latest
+successful inventory.
 
-> Screenshot-Platzhalter: Web-UI mit Modulampeln und MQTT-Verbindungsstatus.
-> Screenshot-Platzhalter: Settings mit Service-Editor und Docker-Freigaben.
+> Screenshot placeholder: web UI with module indicators and MQTT connection status.
+> Screenshot placeholder: settings with the service editor and Docker permissions.
 
 ```yaml
 webui:
@@ -120,227 +122,221 @@ webui:
   allowed_hosts: []
 ```
 
-Für bewussten LAN-Zugriff `bind_address: 0.0.0.0` (oder eine konkrete LAN-IP),
-`username: admin` und `password: "${WEBUI_PASSWORD}"` setzen. Username und Passwort
-müssen gemeinsam gesetzt sein. Der Standard bleibt auch mit Authentifizierung
-Loopback. Für DNS-Namen zusätzlich z. B. `allowed_hosts: [server.home.arpa]`
-setzen; damit weist die UI fremde Hostnamen gegen DNS-Rebinding ab.
+To explicitly allow LAN access, set `bind_address: 0.0.0.0` (or a specific LAN IP),
+`username: admin` and `password: "${WEBUI_PASSWORD}"`. Username and password must
+both be set or both be empty. The default bind address remains loopback even with
+authentication enabled. To use DNS names, also set an exact hostname allowlist,
+for example `allowed_hosts: [server.home.arpa]`. The UI rejects other hostnames to
+protect against DNS rebinding.
 
-**Die UI nicht ungeschützt ins Internet exponieren.** Sie kann Konfiguration,
-Steuerungsfreigaben und gespeicherte Secrets zugänglich machen. Basic Auth über HTTP
-verschlüsselt nicht. Für Fernzugriff vorzugsweise Loopback belassen und einen SSH-Tunnel
-verwenden: `ssh -L 8011:127.0.0.1:8011 user@server`, danach lokal öffnen.
-TLS-Terminierung durch Reverse-Proxies ist derzeit nicht konfiguriert; die UI wertet
-keine Forwarded-Header aus und prüft POST-Origin gegen die direkte Verbindung.
+**Do not expose the UI to the internet without protection.** It provides access
+to configuration, control permissions and stored secrets. Basic Auth over HTTP
+does not provide encryption. For remote access, preferably keep loopback binding
+and use an SSH tunnel: `ssh -L 8011:127.0.0.1:8011 user@server`, then open the local
+URL. Reverse-proxy TLS termination is not currently configured: the UI does not
+trust Forwarded headers and checks POST Origin against the direct connection.
 
-`control_actions.enabled` ist der gemeinsame Hauptschalter für alle Steuerungen.
-Er ist für Kompatibilität mit 0.2.0 standardmäßig `true`; jede einzelne Aktion bleibt
-weiterhin separat opt-in und standardmäßig deaktiviert. Abschalten erhält die
-Einzelfreigaben, unterbindet aber sämtliche Aktionen.
+`control_actions.enabled` is the master switch for all control actions. It defaults
+to `true` for compatibility with 0.2.0; individual actions still require separate
+opt-in and are disabled by default. Turning the master switch off preserves the
+individual permissions but prevents all actions.
 
-**Speichern und Reload:** Poll-Intervall, `expire_after`, Service-Liste, Moduloptionen
-und Steuerungsfreigaben gelten nach dem laufenden Mess-/Steuerungszyklus ohne Neustart.
-MQTT-Verbindungseinstellungen, Agent-ID/-Name, Log-Level und Web-UI-Listener/Auth
-benötigen einen Neustart. Die UI listet diese Abweichungen ausdrücklich auf; bis dahin
-gelten die bisherigen Werte. Reload liest die Datei erneut, speichert aber keine
-ungesendeten Formularänderungen. Ungültige Dateien lassen die aktive Konfiguration
-unberührt. Änderungen an Host-Steuerung und `confirm_required` verlangen zusätzlich
-die Bestätigungscheckbox; das löst selbst keinen Reboot/Shutdown aus.
+**Saving and reloading:** the poll interval, `expire_after`, service list, module
+options and control permissions apply after the current collection/action cycle
+without a restart. MQTT connection settings, agent ID/name, log level and web UI
+listener/authentication settings require a restart. The UI explicitly lists these
+differences; previous values remain active until restart. Reload reads the file
+again but does not save unsent form changes. Invalid files leave the active
+configuration untouched. Host control and `confirm_required` changes also require
+the confirmation checkbox; saving does not itself reboot or shut down the host.
 
-POSTs verwenden signierte CSRF-Tokens und SameSite-Cookies. Gleichzeitige Änderungen
-werden über eine Dateirevision erkannt (409: Formular neu laden). Passwörter erscheinen
-nicht im Formular: leer lassen erhält den Wert, Löschen muss explizit gewählt werden.
-Direkte ENV-Overrides sind gesperrt. Unveränderte `${ENV}`-Referenzen bleiben beim
-Speichern erhalten; bearbeitete Werte werden als Literale gespeichert. Der YAML-Export
-enthält **gespeicherte Klartext-Secrets**, aber keine aufgelösten ENV-Referenzen; Backups
-entsprechend schützen. Für Übertragung auf andere Hosts die referenzierten Variablen
-dort ebenfalls setzen.
+POST requests use signed CSRF tokens and SameSite cookies. File revisions detect
+concurrent changes (409: reload the form). Password fields are never prefilled:
+leaving them blank preserves the existing value; clearing requires an explicit
+checkbox. Direct environment overrides are locked. Unchanged `${ENV}` references
+survive saves; edited values are stored as literals. YAML exports contain
+**stored plaintext secrets**, but do not resolve environment references. Protect
+backups accordingly, and set referenced variables on any destination host.
 
-**Dateirechte:** Der Agent schreibt eine temporäre Datei im selben Verzeichnis,
-synchronisiert sie und ersetzt die Config atomar. Linux-Dateimodus ist danach `0600`.
-Das Config-Verzeichnis muss dem Dienstbenutzer Schreibrechte geben; Symlinks als
-Config-Datei werden beim Speichern abgelehnt. Die systemd-Beispielunit erlaubt Schreiben
-nur unter `/etc/homelab-agent`. Eine extern verwaltete Datei kann bewusst read-only
-bleiben, dann funktionieren Übersicht/Export/Reload, aber kein UI-Save.
+**File permissions:** the agent writes a temporary file in the same directory,
+syncs it and atomically replaces the config. The resulting Linux file mode is
+`0600`. The service user needs write access to the config directory. Saves reject
+symlinks as the config file. The example systemd unit grants a writable config
+path at `/etc/homelab-agent`. An externally managed file can remain read-only;
+overview, export and reload still work, but UI saves will fail.
 
-**Docker / Upgrade von 0.2.0:** Ein einzelner Datei-Bind-Mount lässt sich nicht atomar
-ersetzen. Compose mountet deshalb das ganze `config-data`-Verzeichnis schreibbar; der
-übrige Container bleibt read-only. Vorhandene `configs/config.yaml` dorthin kopieren
-und UID/GID 65532 Schreibrechte geben (siehe Schnellstart). Compose injiziert keine
-leeren MQTT-ENV-Overrides mehr. Bei alten `${MQTT_USER}`/`${MQTT_PASSWORD}`-Referenzen
-entweder die Variablen ausdrücklich unter `environment` weiterreichen oder die Werte
-in YAML konfigurieren. Explizit weitergereichte Overrides bleiben in der UI gesperrt.
+**Docker / upgrading from 0.2.0:** a single-file bind mount cannot be replaced
+atomically. Compose therefore mounts the entire `config-data` directory writable;
+the rest of the container remains read-only. Copy an existing `configs/config.yaml`
+there and grant UID/GID 65532 write access (see quick start). Compose no longer
+injects empty MQTT environment overrides. For old `${MQTT_USER}`/`${MQTT_PASSWORD}`
+references, either explicitly pass these variables under `environment` or configure
+the values in YAML. Explicit overrides remain locked in the UI.
 
-Endpunkte: `GET /`, `GET /config`, `POST /config`, `GET /config/export` und
-`POST /config/reload`. HTML, CSS und Vanilla-JS liegen per `go:embed` im Binary;
-es ist keine Frontend-Toolchain erforderlich.
+Endpoints: `GET /`, `GET /config`, `POST /config`, `GET /config/export` and
+`POST /config/reload`. HTML, CSS and vanilla JavaScript are embedded in the binary
+with `go:embed`; no frontend build toolchain is required.
 
-## Konfiguration
+## Configuration
 
-Eine YAML-Datei ist die Quelle der Konfiguration. Die Web-UI speichert Änderungen
-und übernimmt Live-Einstellungen; externe Änderungen über „Reload ohne Neustart“ laden.
-Unbekannte Felder, mehrere YAML-Dokumente, ungültige IDs, unzulässige
-Check-Typen und fehlende Pflichtwerte werden beim Start abgelehnt. Datenmodule sind
-im Code standardmäßig deaktiviert, außer den eigenen Versions-/Uptime-Sensoren;
-die Beispieldateien aktivieren passende Module. Alle Steuerungsfunktionen sind deaktiviert.
+A YAML file is the configuration source. The web UI saves changes and applies
+supported settings live; use “Reload without restarting” after external edits.
+Unknown fields, multiple YAML documents, invalid IDs, unsupported check types and
+missing required values are rejected at startup. Data modules are disabled by
+code defaults except the agent's version/uptime sensors. Example configs enable
+appropriate modules. All individual control features are disabled by default.
 
-| Schlüssel | Standard | Bedeutung |
+| Key | Default | Meaning |
 | --- | --- | --- |
-| `agent.id` | erforderlich | Buchstaben, Ziffern, `_`, `-`; dauerhaft eindeutige ID |
-| `agent.name` | erforderlich | Anzeigename des Geräts |
-| `agent.poll_interval` | `20s` | Messintervall, mindestens `1s` |
-| `agent.expire_after` | `60s` | Ganze Sekunden, größer als Messintervall |
-| `agent.log_level` | `info` | `debug`, `info`, `warn`, `error`; JSON-Logs auf stderr |
-| `mqtt.broker` | erforderlich | URL, z. B. `tcp://host:1883` oder `ssl://host:8883` |
-| `mqtt.username` / `mqtt.password` | leer | Broker-Zugangsdaten |
-| `mqtt.discovery_prefix` | `homeassistant` | Discovery-Präfix, passend zu Home Assistant |
-| `modules.system.enabled` | `false` | Systemmetriken erfassen |
-| `modules.system.disk_paths` | `["/"]` | Beliebig viele Diskpfade im Agent-Namensraum |
-| `modules.docker.enabled` | `false` | Docker Engine abfragen |
-| `modules.docker.socket_path` | `/var/run/docker.sock` | Unix-Socket |
-| `modules.docker.timeout` | `5s` | Zeitbudget für den gesamten Inventardurchlauf |
-| `modules.services.enabled` | `false` | Service-Checks aktivieren |
-| `modules.services.checks` | `[]` | Liste, Felder siehe unten |
-| `modules.tailscale.enabled` | `false` | Tailscale-Status abfragen |
-| `modules.tailscale.command` | `tailscale` | CLI-Name oder absoluter Binarypfad, keine Shellargumente |
-| `modules.tailscale.timeout` | `5s` | CLI-Zeitlimit |
-| `modules.netbird.enabled` | `false` | NetBird-Status abfragen |
-| `modules.netbird.command` | `netbird` | CLI-Name oder absoluter Binarypfad |
-| `modules.netbird.timeout` | `5s` | CLI-Zeitlimit |
+| `agent.id` | required | Letters, digits, `_`, `-`; stable unique ID |
+| `agent.name` | required | Device display name |
+| `agent.poll_interval` | `20s` | Collection interval, at least `1s` |
+| `agent.expire_after` | `60s` | Whole seconds, greater than the poll interval |
+| `agent.log_level` | `info` | `debug`, `info`, `warn`, `error`; JSON logs to stderr |
+| `mqtt.broker` | required | URL, e.g. `tcp://host:1883` or `ssl://host:8883` |
+| `mqtt.username` / `mqtt.password` | empty | Broker credentials |
+| `mqtt.discovery_prefix` | `homeassistant` | Discovery prefix matching Home Assistant |
+| `modules.system.enabled` | `false` | Collect system metrics |
+| `modules.system.disk_paths` | `["/"]` | Disk paths in the agent's namespace |
+| `modules.docker.enabled` | `false` | Query Docker Engine |
+| `modules.docker.socket_path` | `/var/run/docker.sock` | Unix socket |
+| `modules.docker.timeout` | `5s` | Time budget for the complete inventory cycle |
+| `modules.services.enabled` | `false` | Enable service checks |
+| `modules.services.checks` | `[]` | List of checks; fields below |
+| `modules.tailscale.enabled` | `false` | Query Tailscale status |
+| `modules.tailscale.command` | `tailscale` | CLI name or absolute binary path, no shell arguments |
+| `modules.tailscale.timeout` | `5s` | CLI timeout |
+| `modules.netbird.enabled` | `false` | Query NetBird status |
+| `modules.netbird.command` | `netbird` | CLI name or absolute binary path |
+| `modules.netbird.timeout` | `5s` | CLI timeout |
 
-Service-Felder:
+Service fields:
 
-| Feld | Standard | Bedeutung |
+| Field | Default | Meaning |
 | --- | --- | --- |
-| `name` | erforderlich | Eindeutiger Name; Teil der stabilen Sensor-ID |
-| `type` | erforderlich | `http` oder `tcp` |
-| `url` | für HTTP erforderlich | Absolute HTTP(S)-URL |
-| `expected_status` | `200` | Erwarteter HTTP-Code, 100–599 |
-| `host` | für TCP erforderlich | Hostname oder IP, IPv6 ohne eckige Klammern |
-| `port` | für TCP erforderlich | 1–65535 |
-| `timeout` | `5s` | Positives Zeitlimit je Check |
+| `name` | required | Unique name; part of the stable sensor ID |
+| `type` | required | `http` or `tcp` |
+| `url` | required for HTTP | Absolute HTTP(S) URL |
+| `expected_status` | `200` | Expected HTTP status code, 100–599 |
+| `host` | required for TCP | Hostname or IP; IPv6 without square brackets |
+| `port` | required for TCP | 1–65535 |
+| `timeout` | `5s` | Positive per-check timeout |
 
-HTTP-Checks verwenden GET, prüfen genau den Statuscode und folgen keinen Redirects.
-TLS-Zertifikate werden geprüft. TCP-Checks prüfen den Verbindungsaufbau, nicht das
-Anwendungsprotokoll. Höchstens acht Services werden gleichzeitig geprüft. ICMP/Ping
-ist nicht implementiert; dadurch werden keine Raw-Socket-Rechte benötigt.
-Module laufen parallel; ein Messdurchlauf hat maximal `poll_interval` Zeit. Bei
-vielen langsamen Checks Intervall und `expire_after` erhöhen. Nicht erhobene Werte
-werden nicht durch erfundene Nullwerte ersetzt, sondern laufen in HA ab.
+HTTP checks use GET, match the exact status code and do not follow redirects.
+TLS certificates are verified. TCP checks test connection establishment, not the
+application protocol. At most eight services are checked concurrently. ICMP/ping
+is not implemented, so raw-socket permissions are unnecessary. Modules collect in
+parallel; each cycle has at most `poll_interval` time. Increase the interval and
+`expire_after` for many slow checks. Missing values expire in HA instead of being
+replaced with fabricated zeros.
 
-### ENV und Secrets
+### Environment variables and secrets
 
-`${VARIABLE}` und `$VARIABLE` werden in YAML-Stringwerten expandiert, **nach** dem
-YAML-Parsing. Auch Passwörter mit Doppelpunkten oder Zeilenumbrüchen können daher
-keine YAML-Struktur einschleusen. Nicht gesetzte referenzierte Variablen sind ein
-Startfehler; explizit leere Variablen sind erlaubt. Literal-Dollarzeichen als `$$`
-schreiben; die Web-UI übernimmt dieses Escaping automatisch. Direkte ENV-Overrides
-werden unverändert verwendet.
+`${VARIABLE}` and `$VARIABLE` are expanded in YAML string values **after** YAML
+parsing. Passwords containing colons or newlines therefore cannot inject YAML
+structure. Referencing an unset variable causes a startup error; explicitly empty
+variables are allowed. Write literal dollar signs as `$$`; the UI escapes these
+automatically. Direct environment overrides are used unchanged.
 
-Direkte Overrides nach dem Einlesen:
+Direct overrides after loading:
 
-| ENV | Config |
+| Environment variable | Config |
 | --- | --- |
 | `AGENT_ID`, `AGENT_NAME` | `agent.id`, `agent.name` |
-| `POLL_INTERVAL`, `EXPIRE_AFTER` | entsprechende Agent-Durations |
+| `POLL_INTERVAL`, `EXPIRE_AFTER` | Corresponding agent durations |
 | `LOG_LEVEL` | `agent.log_level` |
-| `MQTT_BROKER`, `MQTT_USER`, `MQTT_PASSWORD` | entsprechende MQTT-Felder |
+| `MQTT_BROKER`, `MQTT_USER`, `MQTT_PASSWORD` | Corresponding MQTT fields |
 
-`.env` wird von **Compose** gelesen. Beim direkten Binary-Aufruf Variablen im
-Prozess-Environment setzen; das Binary lädt keine `.env`-Datei. Echte Configs und
-`.env` sind in `.gitignore` und `.dockerignore` ausgeschlossen.
+**Compose** reads `.env`. For direct binary execution, set variables in the process
+environment; the binary does not load `.env`. Real configs and `.env` are excluded
+by `.gitignore` and `.dockerignore`.
 
-TLS-Schemes sind `ssl`, `tls` und `wss`; zusätzlich werden `tcp` und `ws` unterstützt.
-TLS verwendet mindestens Version 1.2 und die System-CA-Zertifikate. Eigene CAs über
-den System-Truststore bzw. `SSL_CERT_FILE` im Linux-Container bereitstellen. mTLS
-und eine Option zum Abschalten der Zertifikatsprüfung sind nicht implementiert.
+TLS schemes are `ssl`, `tls` and `wss`; `tcp` and `ws` are also supported. TLS uses
+at least version 1.2 and system CA certificates. Supply custom CAs through the
+system trust store or `SSL_CERT_FILE` in the Linux container. mTLS and an option
+to disable certificate verification are not implemented.
 
-## Sensoren und Ausfallverhalten
+## Sensors and failure behavior
 
-| Modul | Sensoren / Attribute |
+| Module | Sensors / attributes |
 | --- | --- |
-| System | CPU %, logische Kerne, CPU-Modell; Load 1/5/15; RAM/Swap used, total, %; Disk used, total, % je Pfad; RX/TX in B/s je Interface; Uptime in s, Hostname, OS, Platform, Kernel |
-| Docker | `containers_running`, `containers_total`; Running-Sensor mit `running`, `total`, `summary` und vollständigem `containers`-Array |
-| Services | Connectivity-binary_sensor je Name; `response_time_ms`, `checked_at` (UTC), `check_type`, HTTP `status_code` bzw. Fehlermeldung |
-| Tailscale | Eigener Online-Status, IP, Anzahl online gemeldeter Peers; IP-Liste und Backendstatus als Attribute; optional gewählter Exit-Node samt Status |
-| NetBird | Management-/Signal-Verbindung, eigene IP (ggf. CIDR), verbundene Peers; Gesamtzahl als Attribut |
+| System | CPU %, logical cores, CPU model; load 1/5/15; RAM/swap used, total, %; disk used, total, % per path; RX/TX in B/s per interface; uptime in seconds, hostname, OS, platform, kernel |
+| Docker | `containers_running`, `containers_total`; running sensor with `running`, `total`, `summary` and complete `containers` array |
+| Services | Connectivity binary sensor per name; `response_time_ms`, `checked_at` (UTC), `check_type`, HTTP `status_code` or error message |
+| Tailscale | Local online status, IP, count of peers reported online; IP list and backend state as attributes; optional selected exit node and status |
+| NetBird | Management/signal connection, local IP (possibly CIDR), connected peers; total peer count as an attribute |
 
-Docker-Details enthalten `id`, `name`, `status`, `image`, `started_at`,
-`uptime_seconds` und ggf. `health`. Uptime ist bei beendeten/restartenden Containern
-0; laufende und pausierte Container verwenden die Zeit seit `StartedAt`. Es werden
-alle Container abgefragt, auch gestoppte. Ein Fehler beim Listen oder Inspizieren
-verwirft diesen Docker-Durchlauf, damit kein unvollständiges Inventar als vollständig
-erscheint. Bei sehr großen Inventaren Docker-Timeout und Broker-Payloadlimit beachten.
+Docker details include `id`, `name`, `status`, `image`, `started_at`,
+`uptime_seconds` and optional `health`. Stopped/restarting containers have uptime
+0; running and paused containers use the time since `StartedAt`. All containers
+are queried, including stopped ones. A list or inspect error discards that Docker
+cycle so incomplete inventory is not reported as complete. For large inventories,
+consider the Docker timeout and broker payload limit.
 
-Netzwerkdurchsatz ist die Differenz zweier Bytezähler geteilt durch die tatsächlich
-verstrichene Zeit. Beim ersten Auftreten eines Interfaces wird nur die Basis erfasst;
-Zählerresets liefern 0 statt eines Überlaufs. Es werden alle gemeldeten Interfaces
-einschließlich Loopback und virtueller Interfaces erfasst.
+Network throughput is the difference between two byte counters divided by actual
+elapsed time. An interface's first observation only establishes a baseline;
+counter resets yield 0 instead of an overflow. All reported interfaces, including
+loopback and virtual interfaces, are collected.
 
-Tailscale/NetBird benötigen CLI **und** Zugriff auf ihren laufenden lokalen Daemon.
-Das Standardimage enthält beide CLIs nicht. Auf dem Host ausführen oder ein eigenes
-Image mit passender CLI und Daemon-Socket verwenden. Fehlt das Programm beim Start,
-zeigt die Übersicht einen Modulfehler und der Agent protokolliert eine Warnung.
-Nach Installation die Konfiguration neu laden oder den Agent neu starten. CLI-Fehler/ungültiges JSON lassen bestehende Sensoren ablaufen;
-explizit gemeldete Offline-Zustände ergeben `OFF`. „Online Peers“ meint den von der
-VPN-Software gemeldeten Zustand, keinen zusätzlichen aktiven Ping.
+Tailscale/NetBird require their CLI **and** access to a running local daemon. The
+default image includes neither CLI. Run on the host or use a custom image with
+the CLI and daemon socket. A missing executable appears as a module error on the
+overview and logs a warning. Reload configuration or restart the agent after
+installing it. CLI failures or invalid JSON let existing sensors expire; explicit
+offline states produce `OFF`. “Online peers” refers to the VPN software's reported
+state, not an additional active ping.
 
-## MQTT und Home Assistant
+## MQTT and Home Assistant
 
 ```text
 homeassistant/<component>/<AGENT_ID>/<sensor_key>/config   (QoS 1, retained)
-<AGENT_ID>/<component>/<sensor_key>/state                  (QoS 1, nicht retained)
+<AGENT_ID>/<component>/<sensor_key>/state                  (QoS 1, not retained)
 <AGENT_ID>/availability                                  (QoS 1, retained)
 ```
 
-Jede Entity referenziert dasselbe Device mit `identifiers: [AGENT_ID]`, Anzeigename,
-Hersteller `homelab-agent` und Build-Version. Sensorzustände sind JSON:
+Every entity references the same device with `identifiers: [AGENT_ID]`, display
+name, manufacturer `homelab-agent` and build version. Sensor states are JSON:
 
 ```json
 {"value": 42.5, "attributes": {}}
 ```
 
-Discovery enthält Templates für Zustand/Attribute und `expire_after` für **alle**
-Sensoren. Binary-Sensoren verwenden `ON`/`OFF`. Namen von Pfaden, Interfaces und
-Services werden als lesbarer Slug mit Hashsuffix abgebildet, um Kollisionen zu
-vermeiden. MQTT-Sensor-IDs sind dauerhaft; Umbenennen eines Services erzeugt eine
-neue Entity.
+Discovery includes state/attribute templates and `expire_after` for **all** sensors.
+Binary sensors use `ON`/`OFF`. Path, interface and service names become readable
+slugs with a hash suffix to avoid collisions. MQTT sensor IDs are stable; renaming
+a service creates a new entity.
 
-Der Agent erneuert Discovery bei jedem Messzyklus. So sind Broker-/HA-Neustarts
-ohne spezielle Reihenfolge möglich. Messwerte sind absichtlich nicht retained:
-alte Werte dürfen `expire_after` beim Wiederabspielen nicht neu starten. HA erhält
-frische Messwerte spätestens im nächsten erfolgreichen Messzyklus. Discovery und
-Availability bleiben retained.
+The agent refreshes discovery every collection cycle, allowing broker/HA restarts
+in any order. Measurements are intentionally not retained: replaying old data must
+not restart `expire_after`. HA receives fresh data by the next successful collection
+cycle. Discovery and availability remain retained.
 
-MQTT-Verbindungen werden zunächst mit Backoff von 1 bis 30 Sekunden aufgebaut;
-nach Verbindungsabbruch übernimmt der MQTT-Client den Reconnect mit maximal 30
-Sekunden Backoff. Ein erfolgreicher Reconnect löst einen neuen Messzyklus aus.
-Während Broker-Ausfällen werden keine alten Messwerte auf Platte gepuffert.
-`online` wird nach dem Verbindungsaufbau und vor Veröffentlichung der Messwerte gesendet, beim geordneten Stop
-`offline`; der Broker veröffentlicht bei unerwartetem Verbindungsverlust das LWT
-`offline` (abhängig von TCP-Erkennung/Keepalive). Läuft nur ein Collector nicht mehr,
-werden dessen Werte über `expire_after` unavailable.
+Initial MQTT connections retry with backoff from 1 to 30 seconds. After connection
+loss, the MQTT client reconnects with a maximum 30-second backoff. A successful
+reconnect triggers collection. Old measurements are not buffered on disk during
+broker outages. The agent sends `online` after connecting and before publishing
+measurements, and `offline` during graceful shutdown. The broker publishes the
+`offline` LWT after unexpected connection loss, subject to TCP detection/keepalive.
+If only a collector fails, its values become unavailable through `expire_after`.
 
-### Entfernte Sensoren bereinigen
+### Clean up removed sensors
 
-Deaktivierte Module oder umbenannte Checks löschen retained Discovery nicht
-automatisch. Die bisherigen Entities werden unavailable. Zum Entfernen **des
-gewünschten einzelnen Sensors** eine leere retained Nachricht an dessen bisheriges
-Discovery-Topic senden, z. B.:
+Disabling a module or renaming a check does not automatically delete retained
+sensor discovery. Previous entities become unavailable. To remove **one specific
+sensor**, publish an empty retained message to its previous discovery topic:
 
 ```sh
 mosquitto_pub -h BROKER -t homeassistant/sensor/srv-01/cpu_percent/config -r -n
 ```
 
-Broker-Zugangsdaten bei Bedarf ergänzen. Solange der Sensor aktiv ist, erzeugt der
-Agent seine Discovery erneut. Bei einer Änderung der Agent-ID die alten Discovery-
-Topics ebenfalls bereinigen.
+Supply broker credentials if needed. Active sensors recreate their discovery.
+Also clean up old discovery topics after changing the agent ID.
 
-### Beispiel-Dashboard
+### Example dashboard
 
-Neue Entities erhalten vorgeschlagene IDs wie `sensor.srv_01_cpu_percent`.
-Home Assistant kann bestehende IDs beibehalten oder bei Kollisionen Suffixe vergeben;
-die tatsächlichen IDs in der Entity-Liste prüfen und die Karte anpassen.
+New entities receive suggested IDs such as `sensor.srv_01_cpu_percent`. Home
+Assistant may preserve existing IDs or add suffixes for collisions; check the
+actual entity list and adjust the card.
 
 ```yaml
 type: entities
@@ -353,13 +349,13 @@ entities:
   - entity: sensor.srv_01_uptime
     name: Uptime
   - entity: sensor.srv_01_containers_running
-    name: Laufende Container
+    name: Running containers
 ```
 
-Für Service-Sensoren und Disk-/Netzwerksensoren die tatsächlichen IDs mit Hashsuffix
-aus HA auswählen. Die Container-Details sind Attribute von `containers_running`.
+For service, disk and network sensors, select the actual IDs with hash suffixes
+from HA. Container details are attributes of `containers_running`.
 
-## Entwicklung und Releases
+## Development and releases
 
 ```sh
 gofmt -w cmd internal
@@ -370,128 +366,125 @@ go build ./...
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/homelab-agent-arm64 ./cmd/homelab-agent
 ```
 
-Der Race Detector benötigt eine unterstützte C-Toolchain; unter Windows ohne diese
-Toolchain `go test ./...` verwenden. Unit-Tests prüfen Config/Secrets, Zählerraten,
-Docker-API/Inventar, HTTP/TCP, CLI-JSON und Discovery. Ein lokaler eingebetteter
-MQTT-Testbroker prüft Publish, retained Discovery, LWT, Reconnect und Shutdown; er
-wird nicht in das Agent-Binary eingebaut. Optional denselben Test mit
+The race detector requires a supported C toolchain; on Windows without one, use
+`go test ./...`. Unit tests cover config/secrets, counter rates, Docker API/inventory,
+HTTP/TCP, CLI JSON and discovery. An embedded local MQTT test broker checks publishing,
+retained discovery, LWT, reconnect and shutdown; it is not included in the agent
+binary. Optionally run
 `MQTT_TEST_BROKER=tcp://127.0.0.1:1883 go test ./internal/mqtt -run TestBrokerIntegration`
-gegen einen **isolierten Testbroker ohne Authentifizierung** ausführen. Der Test
-verwendet die ID `integration` und schreibt Discovery/Availability auf diesem Broker.
+against an **isolated test broker without authentication**. This test uses the ID
+`integration` and publishes discovery/availability to that broker.
 
-CI führt Build, Vet, Tests mit Race Detector, einen Mosquitto-Test und Linux-Cross-
-Builds aus; zusätzlich einen Windows-Build/Test und einen Container-Build. Tags wie
-`v0.3.0` lösen den Multi-Arch-Build (`linux/amd64`, `linux/arm64`) mit Push nach
-`ghcr.io/<owner>/<repo>` aus. Erst nach einem erfolgreichen Workflow existiert dieses
-Image. Für öffentliche Nutzung ggf. die GHCR-Package-Sichtbarkeit auf public setzen.
+CI runs builds, vet, tests with the race detector, a Mosquitto test and Linux cross
+builds, plus Windows build/tests and a container build. Tags such as `v0.3.0`
+trigger a multi-architecture build (`linux/amd64`, `linux/arm64`) and push to
+`ghcr.io/<owner>/<repo>`. The image exists only after a successful workflow. Make
+the GHCR package public if public access is intended.
 
 ```sh
 git tag v0.3.0
 git push origin v0.3.0
 ```
 
-Architektur: `internal/module.Module` besitzt `Name()`, `Enabled()` und `Collect(ctx)`.
-`module.Registration` bindet die bestehenden Collector-Pakete an diese Schnittstelle;
-die Registry erledigt parallele Sammlung und Fehlerisolation. Ein neues Package
-benötigt nur einen Collector und einen Registrierungseintrag in `registered()`.
-Optionale `control.Provider` liefern dynamische Aktionen über `Actions(ctx)`.
-`control.Action` besitzt `ID()`, `Execute(ctx)` und `RequiresConfirm()`; `control.Entry`
-ergänzt Name, Modul, Vorprüfung und Availability-Übergang. Die Main-Loop serialisiert
-Steuerung und Messzyklen. Docker verwendet mockbare API-Interfaces, CLI-Module einen
-Runner und HTTP-Module austauschbare Clients.
+Architecture: `internal/module.Module` exposes `Name()`, `Enabled()` and
+`Collect(ctx)`. `module.Registration` adapts collector packages to this interface;
+the registry handles parallel collection and error isolation. A new package needs
+a collector and a registration in `registered()`. Optional `control.Provider`
+implementations return dynamic actions through `Actions(ctx)`. `control.Action`
+exposes `ID()`, `Execute(ctx)` and `RequiresConfirm()`; `control.Entry` adds a name,
+module, preflight and availability transition. The main loop serializes actions
+and collection cycles. Docker uses mockable API interfaces, CLI modules use a
+runner, and HTTP modules use replaceable clients.
 
-## Verfügbare Module
+## Available modules
 
-Die Defaults beziehen sich auf Code-Defaults; Beispielconfigs aktivieren Systemmetriken.
+Defaults below refer to code defaults; example configs enable system metrics.
 
-| Modul / Feature | Config-Schalter | Default | Benötigte Rechte / Voraussetzungen |
+| Module / feature | Config switch | Default | Required permissions / prerequisites |
 | --- | --- | --- | --- |
-| System-Basis | `modules.system.enabled` | disabled | Lesbare Systeminformationen / Host-Mounts im Container |
-| CPU-Temperatur | `modules.system.temperature` | disabled | Lesbare hwmon-/Thermal-Sensoren, optional `HOST_SYS` |
-| Top-Prozesse + Prozesszahl | `modules.system.processes` | disabled | Prozessdaten lesen; nicht lesbare Prozesse werden gekennzeichnet |
-| Offene FDs + Prozesszahl | `modules.system.file_descriptors` | disabled | Zugriff auf Prozess-FD-Informationen; Linux bevorzugt |
-| Boot-Timestamp | `modules.system.boot_time` | disabled | Host-Bootinformationen |
-| Docker-Inventar + Restart-Count | `modules.docker.enabled` | disabled | Docker-Socket: GET `/containers/*` |
-| Docker CPU/RAM | `modules.docker.stats` | disabled | Zusätzlich GET `/containers/*/stats` |
-| Image-Update-Digest | `modules.docker.image_updates.enabled` | disabled | GET `/images/*`, HTTPS-Zugriff auf anonyme Registry |
-| HTTP/TCP-Checks | `modules.services.enabled` | disabled | Netzwerkzugriff zu den Zielen |
-| Tailscale / NetBird | jeweiliges `enabled` | disabled | CLI und lokaler Daemon erreichbar |
-| Netzwerk-IP-Adressen | `modules.network.enabled` | disabled | Netzwerkschnittstellen lesbar |
-| Lokale IPs | `modules.network.local_ips` | enabled innerhalb Netzwerkmodul | Im Container Host-Netzwerk für Host-IPs |
-| Öffentliche IP | `modules.network.public_ip.enabled` | disabled | Ausgehendes HTTPS zum konfigurierten Endpoint |
-| Agent-Version/Uptime | `agent.metrics_enabled` | enabled | Keine zusätzlichen Rechte |
+| Basic system metrics | `modules.system.enabled` | disabled | Readable system information / host mounts in containers |
+| CPU temperature | `modules.system.temperature` | disabled | Readable hwmon/thermal sensors, optional `HOST_SYS` |
+| Top processes + process count | `modules.system.processes` | disabled | Read process data; inaccessible processes are indicated |
+| Open FDs + process count | `modules.system.file_descriptors` | disabled | Read process FD information; Linux preferred |
+| Boot timestamp | `modules.system.boot_time` | disabled | Host boot information |
+| Docker inventory + restart count | `modules.docker.enabled` | disabled | Docker socket: GET `/containers/*` |
+| Docker CPU/RAM | `modules.docker.stats` | disabled | Additional GET `/containers/*/stats` |
+| Image update digest | `modules.docker.image_updates.enabled` | disabled | GET `/images/*`, HTTPS access to anonymous registry |
+| HTTP/TCP checks | `modules.services.enabled` | disabled | Network access to targets |
+| Tailscale / NetBird | Respective `enabled` | disabled | CLI and accessible local daemon |
+| Network IP addresses | `modules.network.enabled` | disabled | Readable network interfaces |
+| Local IPs | `modules.network.local_ips` | enabled within network module | Host networking for host IPs in containers |
+| Public IP | `modules.network.public_ip.enabled` | disabled | Outbound HTTPS to configured endpoint |
+| Agent version/uptime | `agent.metrics_enabled` | enabled | No additional permissions |
 
-Alle System-Erweiterungen benötigen zusätzlich `modules.system.enabled: true`.
-`top_n` begrenzt die beiden Attributlisten `top_cpu` und `top_ram` (Standard 5,
-zulässig 1–100). Es gibt einen Summary-Sensor, keine Entity pro Prozess. CPU-Raten
-verwenden die Differenz zweier Prozessmessungen; die erste CPU-Liste ist daher leer.
-100 % entspricht einem logischen Kern, mehrkernige Prozesse können darüber liegen.
-PID-Wiederverwendung wird anhand der Prozess-Startzeit erkannt. RAM ist RSS in Bytes.
-Dateideskriptoren sind die Summe über lesbare Prozesse; Attribute `partial`,
-`observed_processes` und `total_processes` zeigen eingeschränkte Sichtbarkeit an.
-Der Agent eskaliert keine Rechte für Prozessmetriken. `hidepid` und Container-
-Namespaces können bereits die sichtbare Prozessliste einschränken.
+All system extensions also require `modules.system.enabled: true`. `top_n` limits
+the `top_cpu` and `top_ram` attribute lists (default 5, allowed 1–100). There is one
+summary sensor, not an entity per process. CPU rates use differences between two
+process observations; the first CPU list is empty. 100% equals one logical core,
+so processes using multiple cores may exceed it. Process start times identify PID
+reuse. RAM is RSS in bytes. File descriptors are summed over readable processes;
+`partial`, `observed_processes` and `total_processes` indicate limited visibility.
+The agent does not escalate privileges for process metrics. `hidepid` and container
+namespaces may restrict the visible process list.
 
-`cpu_temperature` zeigt den höchsten erkannten CPU-Sensorwert; Einzelwerte liegen
-als Attribute vor. Unter Linux wird bei Bedarf `/sys/class/thermal` bzw. `HOST_SYS`
-verwendet. Ohne lesbaren CPU-Sensor erscheint kein erfundener Wert. `boot_time` ist
-ein UTC-Timestamp mit HA-Geräteklasse `timestamp`; `agent_uptime` zählt unabhängig
-davon seit Prozessstart.
+`cpu_temperature` reports the highest detected CPU sensor temperature; individual
+readings are attributes. On Linux, `/sys/class/thermal` or `HOST_SYS` is used as a
+fallback. No value is fabricated when no CPU sensor is readable. `boot_time` is a
+UTC timestamp with HA device class `timestamp`; `agent_uptime` independently counts
+time since process startup.
 
-Container-Stats ergänzen die Inventarattribute und erzeugen CPU-/RAM-Sensoren je
-Container. CPU verwendet Docker-CPU-/Systemzeitdifferenzen und Online-Kernanzahl;
-RAM zieht `inactive_file` bzw. `total_inactive_file` ab. Ohne gültiges CPU-Zeitpaar
-wird kein CPU-Wert gesendet. Stats werden nur für laufende Container abgefragt.
-`restart_count` stammt aus Docker Inspect und ist der Docker-eigene Zähler; er ist
-kein vollständiges Audit aller manuellen Stop/Start-Vorgänge. Stats können pro
-Container etwa eine Sekunde benötigen: bei vielen Containern `docker.timeout`,
-`poll_interval` und `expire_after` entsprechend erhöhen. Fehler einer Stats-Abfrage
-verwerfen nicht das zuvor gelesene Inventar.
+Container stats extend inventory attributes and create CPU/RAM sensors per
+container. CPU uses Docker CPU/system-time differences and online core count.
+RAM subtracts `inactive_file` or `total_inactive_file`. No CPU value is published
+without a valid pair of CPU observations. Stats are collected only for running
+containers. `restart_count` comes from Docker Inspect and is Docker's own counter,
+not a complete audit of manual stop/start operations. Stats can take about one
+second per container; increase `docker.timeout`, `poll_interval` and `expire_after`
+for large inventories. A stats error does not discard previously collected inventory.
 
-Image-Updates werden standardmäßig höchstens alle `6h` mit `5s` Timeout geprüft.
-Verglichen werden lokale RepoDigests mit einem anonym per HTTPS gelesenen
-Schema-2-/OCI-Manifest und ggf. dessen Plattform-Deskriptoren. Ein lokaler Digest in
-einer Manifestliste bedeutet „kein Update für dieses Image“. Authentifizierung,
-Bearer-Token-Flows und Credentials werden nicht verwendet: 401/403/404, ungetaggte
-Image-IDs, digest-gepinnte Referenzen oder fehlende RepoDigests werden übersprungen.
-Das betrifft auch öffentliche Registries, die einen anonymen Bearer-Token verlangen
-(häufig Docker Hub/GHCR). Der Agent zieht oder aktualisiert keine Images.
+Image updates are checked at most every `6h` by default with a `5s` timeout. Local
+RepoDigests are compared with anonymously fetched HTTPS Schema-2/OCI manifests and,
+where applicable, their platform descriptors. A local digest in a manifest list
+means no update for that image. Authentication, bearer-token flows and credentials
+are not used. Responses 401/403/404, untagged image IDs, digest-pinned references and
+missing RepoDigests are skipped. This includes public registries requiring anonymous
+bearer tokens, often Docker Hub/GHCR. The agent never pulls or updates images.
 
-Das Netzwerkmodul veröffentlicht pro Interface einen Sensor mit Anzahl der Adressen
-und vollständiger CIDR-Liste in `addresses`. `public_ip.endpoint` ist standardmäßig
-`https://api.ipify.org`, `interval: 15m`, `timeout: 5s`; Intervalle unter einer Minute
-sind unzulässig. Der Endpoint muss eine einzelne IP als Text liefern. Der Cache
-wird zwischen Polls wiederverwendet; `checked_at` enthält den letzten erfolgreichen
-Abruf. Nach einem fehlgeschlagenen Refresh wird kein alter Wert weiterveröffentlicht;
-HA lässt den Sensor ablaufen. Der nächste Versuch erfolgt nach dem Cacheintervall.
+The network module publishes one sensor per interface with the address count and
+complete CIDR list in `addresses`. Public IP defaults are endpoint
+`https://api.ipify.org`, `interval: 15m`, `timeout: 5s`; intervals below one minute
+are rejected. The endpoint must return one IP as plain text. The cache is reused
+between polls; `checked_at` records the last successful fetch. After a failed refresh,
+old values are no longer published and HA lets the sensor expire. The next attempt
+occurs after the cache interval.
 
-## Verfügbare Steuerungsaktionen
+## Available control actions
 
-| Aktion | Modul / Freigabe | Default | Benötigte Berechtigungen |
+| Action | Module / permission | Default | Required permissions |
 | --- | --- | --- | --- |
-| Host reboot | `host_control.enabled` + `reboot.enabled` | disabled | Nativer Linux-systemd-Host, root, Systembus/Manager und konfiguriertes Programm |
-| Host shutdown | `host_control.enabled` + `shutdown.enabled` | disabled | Wie Reboot |
-| Container start/stop/restart | `modules.docker.control_containers.enabled` | disabled | Linux-Docker-Socket mit GET- und passenden POST-Rechten |
-| Service start/stop/restart | je Check `allow_control: true` + `systemd_unit` | disabled | Nativer Linux-systemd-Host, root, geladene exakte `.service`-Unit |
-| Agent Restart | `agent_control.enabled` | disabled | Supervisor mit Restart-on-failure oder Docker-Restart-Policy |
+| Host reboot | `host_control.enabled` + `reboot.enabled` | disabled | Native Linux/systemd host, root, system bus/manager and configured executable |
+| Host shutdown | `host_control.enabled` + `shutdown.enabled` | disabled | Same as reboot |
+| Container start/stop/restart | `modules.docker.control_containers.enabled` | disabled | Linux Docker socket with GET and appropriate POST permissions |
+| Service start/stop/restart | Per-check `allow_control: true` + `systemd_unit` | disabled | Native Linux/systemd host, root, exact loaded `.service` unit |
+| Agent restart | `agent_control.enabled` | disabled | Supervisor with restart-on-failure or Docker restart policy |
 
-Die Standard-systemd-Unit läuft weiter als unprivilegierter Benutzer und ermöglicht
-keine Host-/Service-Steuerung. Für diese Funktionen muss der Administrator die Unit
-bewusst anpassen (z. B. systemd-Drop-in mit `User=root` und `Group=root`). Der Agent
-ruft weder sudo noch interaktive Polkit-Abfragen auf. Host-/systemd-Steuerung wird
-unter Windows und in erkannten Containern deaktiviert; ein bloßes `pid: host` oder
-ein gemounteter Socket aktiviert sie nicht. Docker-Containersteuerung funktioniert
-hingegen im normalen Agent-Container bei entsprechendem Socketzugriff.
+The default systemd unit runs as an unprivileged user and does not permit host or
+service control. Administrators must explicitly adjust it for those features,
+for example through a drop-in with `User=root` and `Group=root`. The agent invokes
+neither sudo nor interactive Polkit prompts. Host/systemd control is disabled on
+Windows and in detected containers; `pid: host` or a mounted socket alone does not
+enable it. Docker container control works in the normal agent container when socket
+access permits it.
 
-Vor der Registrierung werden Programme, Host/systemd-Voraussetzungen, geladene
-Units bzw. Socket-Erreichbarkeit read-only geprüft. Vor jeder Ausführung erfolgen
-erneute Unit-/Zielprüfungen. Unverfügbare Aktionen werden geloggt. Docker-Authorization-
-Plugins oder sich ändernde Systembus-Richtlinien können GET erlauben und POST später
-ablehnen; eine garantiert vollständige Schreibrechteprüfung wäre selbst eine Mutation.
-Solche Fehler werden bei Ausführung strukturiert protokolliert, ohne automatischen
-Retry. Timeouts können bedeuten, dass eine bereits angenommene Aktion dennoch läuft.
+Before registration, the agent performs read-only checks of executables, host/systemd
+prerequisites, loaded units and socket reachability. Units/targets are checked again
+before execution. Unavailable actions are logged. Docker authorization plugins or
+changing system-bus policies may allow GET but later reject POST; a complete proof
+of write access would itself require a mutation. Execution errors are logged with
+structured details and no automatic retry. A timeout may mean an accepted action
+is still running.
 
-### Freigaben konfigurieren
+### Configure permissions
 
 ```yaml
 host_control:
@@ -511,87 +504,84 @@ agent_control:
   enabled: false
 ```
 
-`command` und `preflight` sind Argumentlisten ohne implizite Shell; `preflight` muss
-ein **nur lesender** Test sein. Beide kommen ausschließlich aus der vertrauenswürdigen
-lokalen Config, nie aus einem MQTT-Payload. Beispiel für gezielte Containerfreigabe
-innerhalb des bereits aktivierten Docker-Moduls:
+`command` and `preflight` are argument lists without an implicit shell; `preflight`
+must be a **read-only** check. Both come exclusively from trusted local configuration,
+never from MQTT payloads. Example container permissions within an enabled Docker module:
 
 ```yaml
 control_containers:
   enabled: true
-  allow: [herbst, adguard]
+  allow: [web, adguard]
   deny: [postgres]
 ```
 
-Eine leere Allowlist erlaubt nach Aktivierung alle Namen; Deny hat immer Vorrang.
-Es sind exakte Docker-Namen ohne führenden Slash, keine Globmuster. Die Buttons
-verwenden unveränderliche Container-IDs als Ziele; eine neue Instanz mit gleichem
-Namen erhält neue Buttons. Ein Namenswechsel nach Discovery wird vor Ausführung
-abgelehnt, bis das Inventar aktualisiert wurde.
+An empty allowlist permits all names after enabling control; deny always takes
+precedence. Names are exact Docker names without leading slashes, not glob patterns.
+Buttons target immutable container IDs. A new instance with the same name receives
+new buttons. A name change after discovery is rejected before execution until the
+inventory is refreshed.
 
-Für einen Service-Check `systemd_unit: adguard.service` und `allow_control: true`
-ergänzen. Service-Name und Unit sind getrennte Felder. Die Unit darf keine Optionen,
-Pfade oder Wildcards enthalten. Docker-/Service-Aktionen haben ein 30s-Zeitbudget,
-Hostaktionen `host_control.timeout`. Docker stop/restart verwendet 10s Grace-Zeit.
-Erfolgreiche Aktionen lösen sofort einen neuen Mess-/Discovery-Zyklus aus.
+For a service check, add `systemd_unit: adguard.service` and `allow_control: true`.
+The service name and unit are separate fields. Units cannot contain options, paths
+or wildcards. Docker/service actions have a 30-second budget; host actions use
+`host_control.timeout`. Docker stop/restart uses a 10-second grace period.
+Successful actions immediately trigger a collection/discovery cycle.
 
-Agent Restart beendet den Prozess nach MQTT-Offline und Disconnect mit **Exitcode
-75**. Die mitgelieferten systemd-/Compose-Restart-Regeln starten ihn erneut und lesen
-die Config neu. Ohne Supervisor bleibt der Prozess beendet. Eine geänderte, ungültige
-Config verhindert den Neustart; deshalb vorher `-check-config` verwenden.
+Agent restart announces MQTT offline, disconnects and exits with **code 75**.
+The provided systemd/Compose restart rules restart the agent and reload configuration.
+Without a supervisor, it stays stopped. Invalid modified configuration prevents
+startup; validate first with `-check-config`.
 
-### MQTT-Kommandos und Audit
+### MQTT commands and audit
 
-Button-Discovery: `homeassistant/button/<ID>/<action_id>/config`.
-Command-Topic: `<ID>/button/<action_id>/command`, QoS 0, **nicht retained**.
-Buttons teilen das Monitoring-Device; `expire_after` gilt nur für Sensoren,
-Button-Verfügbarkeit über das gemeinsame Availability-Topic.
+Button discovery: `homeassistant/button/<ID>/<action_id>/config`.
+Command topic: `<ID>/button/<action_id>/command`, QoS 0, **not retained**.
+Buttons share the monitoring device. `expire_after` applies only to sensors;
+button availability uses the shared availability topic.
 
 ```json
-{"session":"aktueller-Wert-aus-Discovery","confirm":false}
+{"session":"current-value-from-discovery","confirm":false}
 ```
 
-Der Agent rotiert `session` bei MQTT-Verbindungswechseln und nach jedem begonnenen
-Steuerungsversuch, auch bei Ausführungsfehlern. Die aktuelle Session steht im Discovery-`payload_press`, im
-Attribut `control_session` des Agent-Version-Sensors und als JSON unter
-`<ID>/control/session`. Sie ist ein Schutz gegen veraltete Nachrichten, **kein
-geheimes Authentifizierungsmerkmal**. Retained-Replays, DUP-Pakete, ungültiges JSON,
-Payloads über 512 Bytes, alte Sessions und Befehle ohne freigeschaltete Aktion werden
-verworfen. Die Queue fasst acht Befehle; nach 15s Wartezeit verfallen sie. Gleiche
-Aktionen haben 2s Cooldown. Befehle und Messzyklen werden serialisiert.
+The agent rotates `session` on MQTT connection changes and after every started
+action attempt, including execution failures. The current session appears in
+discovery `payload_press`, the agent version sensor's `control_session` attribute,
+and JSON at `<ID>/control/session`. It protects against stale messages; it is
+**not a secret authentication credential**. Retained replays, DUP packets, invalid
+JSON, payloads over 512 bytes, old sessions and commands for disabled actions are
+rejected. The queue holds eight commands, which expire after 15 seconds waiting.
+Identical actions have a 2-second cooldown. Commands and collection cycles are serialized.
 
-Audit-Logs enthalten Zeit, Aktion, Topic, QoS, Beginn und Ergebnis/Ablehnungsgrund.
-MQTT 3.1.1 leitet keine Identität des Publishers an Subscriber weiter; `actor` wird
-deshalb ehrlich als unbekannt ausgewiesen. Authentifizierung/Autorisierung muss am
-Broker erfolgen: nur vertrauenswürdigen HA-/Admin-Clients Schreibrechte auf
-`<ID>/button/+/command` geben, TLS einsetzen und Broker-Logs für Benutzerzuordnung
-verwenden. Der Agent benötigt Schreibrechte auf eigene State-/Discovery-Topics,
-Leserechte auf eigene Button-Discovery zur Bereinigung und bei Steuerung auf
-eigene Command-Topics. Bestätigung ersetzt diese ACLs nicht.
+Audit logs record time, action, topic, QoS, start and result/rejection reason.
+MQTT 3.1.1 does not forward publisher identity to subscribers, so `actor` is reported
+as unknown. Enforce authentication/authorization at the broker: grant write access
+to `<ID>/button/+/command` only to trusted HA/admin clients, use TLS and use broker
+logs to identify users. The agent needs write access to its state/discovery topics,
+read access to its button discovery for cleanup and, when controlling actions,
+read access to its command topics. Confirmation does not replace these ACLs.
 
-Vor Hostaktionen wird `rebooting` bzw. `shutting_down` auf Availability bestätigt
-publiziert. Bei einem Befehlsfehler wird `online` wiederhergestellt; beim erfolgreichen
-Herunterfahren des Agent folgt `offline`. HA-MQTT-Topic-Überwachung zeigt die
-Übergangsnachrichten; ein automatischer HA-Logbook-Eintrag ist dadurch nicht garantiert.
+Before host actions, the agent publishes and awaits acknowledgment of `rebooting`
+or `shutting_down` on availability. Command failure restores `online`; successful
+agent shutdown sends `offline`. HA's MQTT topic monitor shows these transitions;
+an automatic HA logbook entry is not guaranteed.
 
-Veraltete **Button**-Discovery wird automatisch bereinigt, auch nach Neustarts mit
-deaktivierter Steuerung (ggf. im folgenden Poll). Sensor-Discovery bleibt gemäß dem
-oben beschriebenen manuellen Bereinigungsverfahren erhalten. Docker-Inventarfehler
-nehmen Docker-Buttons vorsichtshalber vorübergehend aus der Discovery.
+Stale **button** discovery is cleaned up automatically, including after restarts
+with control disabled, possibly on the next poll. Sensor discovery follows the
+manual cleanup procedure above. Docker inventory errors temporarily remove Docker
+buttons from discovery as a precaution.
 
-### Bestätigung gefährlicher Aktionen in Home Assistant
+### Confirm dangerous actions in Home Assistant
 
-**MQTT-Discovery hat kein `confirmation`-Feld.** Bestätigungsdialoge sind eine
-[Dashboard-Aktion](https://www.home-assistant.io/dashboards/actions), keine Eigenschaft
-der [MQTT-Button-Integration](https://www.home-assistant.io/integrations/button.mqtt/).
-`confirm_required: true` wird deshalb im Agent durchgesetzt: der normale
-`button.press`-Payload bestätigt nichts und wird abgelehnt. Verwende stattdessen
-dieses HA-Script in `scripts.yaml` (ID/Entity-Namen anpassen, `agent.metrics_enabled`
-aktiv lassen):
+**MQTT Discovery has no `confirmation` field.** Confirmation dialogs belong to
+[dashboard actions](https://www.home-assistant.io/dashboards/actions), not the
+[MQTT button integration](https://www.home-assistant.io/integrations/button.mqtt/).
+The agent therefore enforces `confirm_required: true`: the normal `button.press`
+payload does not confirm anything and is rejected. Instead, use this HA script in
+`scripts.yaml` (adjust IDs/entity names and keep `agent.metrics_enabled` enabled):
 
 ```yaml
 homelab_srv01_reboot:
-  alias: Server 1 neu starten
+  alias: Restart Server 1
   mode: single
   sequence:
     - action: mqtt.publish
@@ -604,28 +594,28 @@ homelab_srv01_reboot:
               'confirm': true} | to_json }}
 ```
 
-Dashboard-Karte mit nativem Bestätigungsdialog:
+Dashboard card with a native confirmation dialog:
 
 ```yaml
 type: button
-name: Server 1 neu starten
+name: Restart Server 1
 icon: mdi:restart
 tap_action:
   action: perform-action
   perform_action: script.homelab_srv01_reboot
   confirmation:
-    text: Server 1 wirklich neu starten?
+    text: Really restart Server 1?
 hold_action:
   action: none
 ```
 
-Für Shutdown analog `host_shutdown` verwenden. Die Bestätigung gilt für diese
-Dashboard-Karte; direkte Script-/MQTT-Aufrufe können keinen menschlichen Klick
-beweisen und müssen über HA-Rechte/Broker-ACLs geschützt werden. Mit
-`confirm_required: false` funktioniert der entdeckte Button direkt ohne Dialog.
-Der Agent gibt niemals automatisch `confirm: true` in Discovery vor.
+Use `host_shutdown` similarly for shutdown. Confirmation applies to this dashboard
+card; direct script/MQTT calls cannot prove a human click and must be protected
+through HA permissions/broker ACLs. With `confirm_required: false`, the discovered
+button works directly without a dialog. The agent never automatically includes
+`confirm: true` in discovery.
 
-### Quellen der Protokollimplementierung
+### Protocol implementation references
 
 - [Home Assistant MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
 - [MQTT Sensor](https://www.home-assistant.io/integrations/sensor.mqtt/)
@@ -634,4 +624,4 @@ Der Agent gibt niemals automatisch `confirm: true` in Discovery vor.
 - [Paho MQTT Go](https://github.com/eclipse-paho/paho.mqtt.golang)
 - [NetBird CLI](https://docs.netbird.io/get-started/cli)
 
-MIT-Lizenz, siehe [LICENSE](LICENSE).
+MIT license; see [LICENSE](LICENSE).

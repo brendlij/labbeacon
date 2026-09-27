@@ -29,21 +29,21 @@ type choice struct {
 
 func specs() []section {
 	return []section{
-		{Title: "Agent & MQTT", Hint: "Intervall und Ablaufzeit gelten live. Identität, Log-Level und MQTT-Verbindung erfordern einen Neustart.", Fields: []field{
-			{Path: "agent.id", Label: "Agent-ID", Kind: "text"}, {Path: "agent.name", Label: "Name", Kind: "text"}, {Path: "agent.poll_interval", Label: "Messintervall (z. B. 20s)", Kind: "text"}, {Path: "agent.expire_after", Label: "Werte gültig für (z. B. 60s)", Kind: "text"}, {Path: "agent.log_level", Label: "Log-Level: debug / info / warn / error", Kind: "text"}, {Path: "agent.metrics_enabled", Label: "Agent-Version und Uptime", Kind: "bool"},
-			{Path: "mqtt.broker", Label: "MQTT-Broker", Kind: "text"}, {Path: "mqtt.username", Label: "MQTT-Benutzer", Kind: "text"}, {Path: "mqtt.password", Label: "MQTT-Passwort", Kind: "password"}, {Path: "mqtt.discovery_prefix", Label: "Discovery-Präfix", Kind: "text"}}},
-		{Title: "System", Hint: "Lokale Messwerte. Listen: ein Eintrag je Zeile.", Fields: []field{
-			{Path: "modules.system.enabled", Label: "System-Modul aktiv", Kind: "bool"}, {Path: "modules.system.disk_paths", Label: "Disk-Pfade", Kind: "lines"}, {Path: "modules.system.temperature", Label: "CPU-Temperatur", Kind: "bool"}, {Path: "modules.system.processes", Label: "Top-Prozesse", Kind: "bool"}, {Path: "modules.system.top_n", Label: "Top-N (1–100)", Kind: "number"}, {Path: "modules.system.file_descriptors", Label: "Dateideskriptoren", Kind: "bool"}, {Path: "modules.system.boot_time", Label: "Boot-Zeitpunkt", Kind: "bool"}}},
-		{Title: "Docker", Hint: "Monitoring und Steuerung sind getrennt. Freigaben wählst du weiter unten.", Fields: []field{
-			{Path: "modules.docker.enabled", Label: "Docker-Modul aktiv", Kind: "bool"}, {Path: "modules.docker.socket_path", Label: "Socket-Pfad", Kind: "text"}, {Path: "modules.docker.timeout", Label: "Inventar-Timeout", Kind: "text"}, {Path: "modules.docker.stats", Label: "Container CPU / RAM", Kind: "bool"}, {Path: "modules.docker.control_containers.enabled", Label: "Container-Steuerung erlauben", Kind: "bool"}, {Path: "modules.docker.image_updates.enabled", Label: "Anonyme Image-Update-Prüfung", Kind: "bool"}, {Path: "modules.docker.image_updates.interval", Label: "Update-Prüfintervall", Kind: "text"}, {Path: "modules.docker.image_updates.timeout", Label: "Registry-Timeout", Kind: "text"}}},
-		{Title: "Services & VPN", Hint: "HTTP/TCP-Checks bearbeitest du in der Serviceliste. VPN benötigt die jeweilige lokale CLI.", Fields: []field{
-			{Path: "modules.services.enabled", Label: "Service-Checks aktiv", Kind: "bool"}, {Path: "modules.tailscale.enabled", Label: "Tailscale aktiv", Kind: "bool"}, {Path: "modules.tailscale.command", Label: "Tailscale-Programm", Kind: "text"}, {Path: "modules.tailscale.timeout", Label: "Tailscale-Timeout", Kind: "text"}, {Path: "modules.netbird.enabled", Label: "NetBird aktiv", Kind: "bool"}, {Path: "modules.netbird.command", Label: "NetBird-Programm", Kind: "text"}, {Path: "modules.netbird.timeout", Label: "NetBird-Timeout", Kind: "text"}}},
-		{Title: "Netzwerk", Hint: "Die öffentliche IP wird über einen gecachten HTTPS-Abruf ermittelt.", Fields: []field{
-			{Path: "modules.network.enabled", Label: "Netzwerk-Modul aktiv", Kind: "bool"}, {Path: "modules.network.local_ips", Label: "Lokale IP-Adressen", Kind: "bool"}, {Path: "modules.network.public_ip.enabled", Label: "Öffentliche IP", Kind: "bool"}, {Path: "modules.network.public_ip.endpoint", Label: "HTTPS-Endpoint", Kind: "text"}, {Path: "modules.network.public_ip.interval", Label: "IP-Cacheintervall", Kind: "text"}, {Path: "modules.network.public_ip.timeout", Label: "IP-Abfrage-Timeout", Kind: "text"}}},
-		{Title: "Steuerungsaktionen", Hint: "Aktivieren erlaubt zukünftige MQTT-Kommandos. Diese Seite führt keine Steuerungsaktion aus. Befehle bleiben in der lokalen YAML konfiguriert.", Fields: []field{
-			{Path: "control_actions.enabled", Label: "Steuerungsaktionen – Hauptschalter", Kind: "bool"}, {Path: "agent_control.enabled", Label: "Agent-Restart erlauben (Supervisor nötig)", Kind: "bool"}, {Path: "host_control.enabled", Label: "Host-Steuerung erlauben", Kind: "bool"}, {Path: "host_control.timeout", Label: "Host-Befehls-Timeout", Kind: "text"}, {Path: "host_control.reboot.enabled", Label: "Reboot-Aktion aktiv", Kind: "bool"}, {Path: "host_control.reboot.confirm_required", Label: "Reboot braucht MQTT-Bestätigung", Kind: "bool"}, {Path: "host_control.shutdown.enabled", Label: "Shutdown-Aktion aktiv", Kind: "bool"}, {Path: "host_control.shutdown.confirm_required", Label: "Shutdown braucht MQTT-Bestätigung", Kind: "bool"}}},
-		{Title: "Web-UI", Hint: "Änderungen in diesem Abschnitt erfordern einen Neustart. Ohne TLS wird Basic Auth unverschlüsselt transportiert.", Fields: []field{
-			{Path: "webui.enabled", Label: "Web-UI aktiv", Kind: "bool"}, {Path: "webui.bind_address", Label: "Bind-Adresse", Kind: "text"}, {Path: "webui.port", Label: "Port", Kind: "number"}, {Path: "webui.username", Label: "Basic-Auth-Benutzer", Kind: "text"}, {Path: "webui.password", Label: "Basic-Auth-Passwort", Kind: "password"}, {Path: "webui.allowed_hosts", Label: "Erlaubte DNS-Namen (ohne Port)", Kind: "lines"}}},
+		{Title: "Agent & MQTT", Hint: "Interval and expiry changes apply live. Identity, log level and MQTT connection changes require a restart.", Fields: []field{
+			{Path: "agent.id", Label: "Agent ID", Kind: "text"}, {Path: "agent.name", Label: "Name", Kind: "text"}, {Path: "agent.poll_interval", Label: "Poll interval (e.g. 20s)", Kind: "text"}, {Path: "agent.expire_after", Label: "Expire after (e.g. 60s)", Kind: "text"}, {Path: "agent.log_level", Label: "Log level: debug / info / warn / error", Kind: "text"}, {Path: "agent.metrics_enabled", Label: "Agent version and uptime", Kind: "bool"},
+			{Path: "mqtt.broker", Label: "MQTT broker", Kind: "text"}, {Path: "mqtt.username", Label: "MQTT username", Kind: "text"}, {Path: "mqtt.password", Label: "MQTT password", Kind: "password"}, {Path: "mqtt.discovery_prefix", Label: "Discovery prefix", Kind: "text"}}},
+		{Title: "System", Hint: "Local metrics. Lists: one entry per line.", Fields: []field{
+			{Path: "modules.system.enabled", Label: "Enable system module", Kind: "bool"}, {Path: "modules.system.disk_paths", Label: "Disk paths", Kind: "lines"}, {Path: "modules.system.temperature", Label: "CPU temperature", Kind: "bool"}, {Path: "modules.system.processes", Label: "Top processes", Kind: "bool"}, {Path: "modules.system.top_n", Label: "Top-N (1–100)", Kind: "number"}, {Path: "modules.system.file_descriptors", Label: "File descriptors", Kind: "bool"}, {Path: "modules.system.boot_time", Label: "Boot time", Kind: "bool"}}},
+		{Title: "Docker", Hint: "Monitoring and control have separate switches. Select permissions below.", Fields: []field{
+			{Path: "modules.docker.enabled", Label: "Enable Docker module", Kind: "bool"}, {Path: "modules.docker.socket_path", Label: "Socket path", Kind: "text"}, {Path: "modules.docker.timeout", Label: "Inventory timeout", Kind: "text"}, {Path: "modules.docker.stats", Label: "Container CPU / RAM", Kind: "bool"}, {Path: "modules.docker.control_containers.enabled", Label: "Allow container control", Kind: "bool"}, {Path: "modules.docker.image_updates.enabled", Label: "Anonymous image update checks", Kind: "bool"}, {Path: "modules.docker.image_updates.interval", Label: "Update check interval", Kind: "text"}, {Path: "modules.docker.image_updates.timeout", Label: "Registry timeout", Kind: "text"}}},
+		{Title: "Services & VPN", Hint: "Edit HTTP/TCP checks in the service list. VPN monitoring requires the corresponding local CLI.", Fields: []field{
+			{Path: "modules.services.enabled", Label: "Enable service checks", Kind: "bool"}, {Path: "modules.tailscale.enabled", Label: "Enable Tailscale", Kind: "bool"}, {Path: "modules.tailscale.command", Label: "Tailscale executable", Kind: "text"}, {Path: "modules.tailscale.timeout", Label: "Tailscale timeout", Kind: "text"}, {Path: "modules.netbird.enabled", Label: "Enable NetBird", Kind: "bool"}, {Path: "modules.netbird.command", Label: "NetBird executable", Kind: "text"}, {Path: "modules.netbird.timeout", Label: "NetBird timeout", Kind: "text"}}},
+		{Title: "Network", Hint: "The public IP address is retrieved over HTTPS and cached.", Fields: []field{
+			{Path: "modules.network.enabled", Label: "Enable network module", Kind: "bool"}, {Path: "modules.network.local_ips", Label: "Local IP addresses", Kind: "bool"}, {Path: "modules.network.public_ip.enabled", Label: "Public IP address", Kind: "bool"}, {Path: "modules.network.public_ip.endpoint", Label: "HTTPS endpoint", Kind: "text"}, {Path: "modules.network.public_ip.interval", Label: "IP cache interval", Kind: "text"}, {Path: "modules.network.public_ip.timeout", Label: "IP request timeout", Kind: "text"}}},
+		{Title: "Control actions", Hint: "Enabling these options allows future MQTT commands. This page does not execute control actions. Commands remain configured in the local YAML file.", Fields: []field{
+			{Path: "control_actions.enabled", Label: "Control actions – master switch", Kind: "bool"}, {Path: "agent_control.enabled", Label: "Allow agent restart (requires a supervisor)", Kind: "bool"}, {Path: "host_control.enabled", Label: "Allow host control", Kind: "bool"}, {Path: "host_control.timeout", Label: "Host command timeout", Kind: "text"}, {Path: "host_control.reboot.enabled", Label: "Enable reboot action", Kind: "bool"}, {Path: "host_control.reboot.confirm_required", Label: "Require MQTT confirmation for reboot", Kind: "bool"}, {Path: "host_control.shutdown.enabled", Label: "Enable shutdown action", Kind: "bool"}, {Path: "host_control.shutdown.confirm_required", Label: "Require MQTT confirmation for shutdown", Kind: "bool"}}},
+		{Title: "Web UI", Hint: "Changes in this section require a restart. Without TLS, Basic Auth is sent without encryption.", Fields: []field{
+			{Path: "webui.enabled", Label: "Enable web UI", Kind: "bool"}, {Path: "webui.bind_address", Label: "Bind address", Kind: "text"}, {Path: "webui.port", Label: "Port", Kind: "number"}, {Path: "webui.username", Label: "Basic Auth username", Kind: "text"}, {Path: "webui.password", Label: "Basic Auth password", Kind: "password"}, {Path: "webui.allowed_hosts", Label: "Allowed DNS names (without ports)", Kind: "lines"}}},
 	}
 }
 func nodeAt(n *yaml.Node, path string) *yaml.Node {
@@ -144,7 +144,7 @@ func containerChoices(c config.Config, current []Container) []choice {
 	out := make([]choice, 0, len(all))
 	for _, v := range all {
 		if v.Status == "" {
-			v.Status = "zurzeit nicht gefunden"
+			v.Status = "currently not found"
 		}
 		out = append(out, v)
 	}
@@ -163,7 +163,7 @@ func lines(value string) []string {
 }
 func parseForm(current config.Config, values url.Values) (config.Config, error) {
 	if values.Get("form") != "settings" {
-		return config.Config{}, fmt.Errorf("Ungültiges Formular")
+		return config.Config{}, fmt.Errorf("Invalid form")
 	}
 	var n yaml.Node
 	if err := n.Encode(current); err != nil {
@@ -185,7 +185,7 @@ func parseForm(current config.Config, values url.Values) (config.Config, error) 
 				target.Value = strconv.FormatBool(value == "on")
 			case "number":
 				if _, e := strconv.Atoi(value); e != nil {
-					return config.Config{}, fmt.Errorf("%s: ganze Zahl erforderlich", f.Label)
+					return config.Config{}, fmt.Errorf("%s: an integer is required", f.Label)
 				}
 				target.Tag = "!!int"
 				target.Value = value
@@ -209,7 +209,7 @@ func parseForm(current config.Config, values url.Values) (config.Config, error) 
 	}
 	var next config.Config
 	if err := n.Decode(&next); err != nil {
-		return config.Config{}, fmt.Errorf("Feldwert ungültig; Zeiten bitte mit Einheit eingeben (z. B. 20s)")
+		return config.Config{}, fmt.Errorf("Invalid field value; enter durations with a unit (e.g. 20s)")
 	}
 	next.Modules.Docker.ControlContainers.Allow = append(values["docker_allow"], lines(values.Get("docker_extra_allow"))...)
 	next.Modules.Docker.ControlContainers.Deny = append(values["docker_deny"], lines(values.Get("docker_extra_deny"))...)
@@ -217,16 +217,16 @@ func parseForm(current config.Config, values url.Values) (config.Config, error) 
 	decoder := json.NewDecoder(strings.NewReader(values.Get("services_json")))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&services); err != nil {
-		return config.Config{}, fmt.Errorf("Serviceliste ungültig")
+		return config.Config{}, fmt.Errorf("Invalid service list")
 	}
 	if len(services) > 100 {
-		return config.Config{}, fmt.Errorf("Maximal 100 Service-Checks")
+		return config.Config{}, fmt.Errorf("Maximum of 100 service checks")
 	}
 	next.Modules.Services.Checks = nil
 	for _, s := range services {
 		d, err := time.ParseDuration(s.Timeout)
 		if err != nil {
-			return config.Config{}, fmt.Errorf("Service %s: Timeout ungültig", s.Name)
+			return config.Config{}, fmt.Errorf("Service %s: invalid timeout", s.Name)
 		}
 		next.Modules.Services.Checks = append(next.Modules.Services.Checks, config.Check{Name: s.Name, Type: s.Type, URL: s.URL, ExpectedStatus: s.ExpectedStatus, Timeout: d, Host: s.Host, Port: s.Port, SystemdUnit: s.SystemdUnit, AllowControl: s.AllowControl})
 	}

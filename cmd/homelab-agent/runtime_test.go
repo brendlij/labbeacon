@@ -76,7 +76,7 @@ func TestWebReloadWhileBrokerOffline(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if !strings.Contains(page, "MQTT getrennt") {
+	if !strings.Contains(page, "MQTT disconnected") {
 		t.Fatal("UI unavailable while MQTT is offline")
 	}
 	token := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(page)
@@ -121,7 +121,7 @@ func TestWebReloadWhileBrokerOffline(t *testing.T) {
 	}
 	b, _ := io.ReadAll(r.Body)
 	r.Body.Close()
-	if !strings.Contains(string(b), "Änderung erfordert Neustart des Agents") {
+	if !strings.Contains(string(b), "Changes require an agent restart") {
 		t.Fatal("missing MQTT restart notice")
 	}
 	if e = os.WriteFile(path, []byte("bad: ["), 0600); e != nil {

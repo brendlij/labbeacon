@@ -30,7 +30,7 @@ if (document.querySelector("#live-status")) {
       if (!status) throw new Error("markup");
       document.querySelector("#live-status").replaceWith(status);
     } catch (_) {
-      document.querySelector("#refresh-status").textContent = "Status nicht erreichbar. Angezeigte Werte können veraltet sein.";
+      document.querySelector("#refresh-status").textContent = "Status unavailable. Displayed values may be outdated.";
     }
   }, 5000);
 }

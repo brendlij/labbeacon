@@ -89,7 +89,7 @@ func registered(cfg config.Config, client *mqtt.Client, log *slog.Logger) (*modu
 		resolved, e := exec.LookPath(cli.Command)
 		if e != nil {
 			log.Warn("module unavailable: CLI not found", "module", name, "command", cli.Command)
-			modules = append(modules, module.Registration{ModuleName: name, Active: true, Collector: module.Unavailable{Reason: fmt.Errorf("CLI nicht gefunden: %s", cli.Command)}})
+			modules = append(modules, module.Registration{ModuleName: name, Active: true, Collector: module.Unavailable{Reason: fmt.Errorf("CLI not found: %s", cli.Command)}})
 			continue
 		}
 		r := module.Registration{ModuleName: name, Active: true}

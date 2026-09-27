@@ -88,16 +88,16 @@ func (s *State) Report(modules []ModuleStatus, containers []Container) {
 func RestartFields(active, next config.Config) []string {
 	var fields []string
 	if active.MQTT != next.MQTT {
-		fields = append(fields, "MQTT-Verbindung / Discovery-Präfix")
+		fields = append(fields, "MQTT connection / discovery prefix")
 	}
 	if active.Agent.ID != next.Agent.ID || active.Agent.Name != next.Agent.Name {
-		fields = append(fields, "Agent-ID / Name")
+		fields = append(fields, "Agent ID / Name")
 	}
 	if active.Agent.LogLevel != next.Agent.LogLevel {
-		fields = append(fields, "Log-Level")
+		fields = append(fields, "Log level")
 	}
 	if !reflect.DeepEqual(active.WebUI, next.WebUI) {
-		fields = append(fields, "Web-UI: Adresse, Port oder Zugangsdaten")
+		fields = append(fields, "Web UI: address, port or credentials")
 	}
 	return fields
 }
