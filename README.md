@@ -70,7 +70,7 @@ subject to the control master switch. Socket access grants extensive host permis
 ## Deploy with Komodo or another stack manager
 
 Use **UI Defined** in Komodo and paste [deploy/compose.ghcr.yaml](deploy/compose.ghcr.yaml)
-as the stack's Compose file. It pulls `ghcr.io/brendlij/labbeacon:0.3.1` instead of
+as the stack's Compose file. It pulls `ghcr.io/brendlij/labbeacon:0.3.2` instead of
 building from source. Save the stack configuration, then deploy it.
 
 First prepare the configuration **on the selected Docker server**, not inside the
@@ -102,7 +102,7 @@ problems: the stack manager needs the Compose definition, while the agent reads
 ## Quick start with the binary
 
 ```sh
-go build -trimpath -ldflags="-s -w -X github.com/brendlij/labbeacon/internal/version.Version=0.3.1" -o bin/labbeacon ./cmd/labbeacon
+go build -trimpath -ldflags="-s -w -X github.com/brendlij/labbeacon/internal/version.Version=0.3.2" -o bin/labbeacon ./cmd/labbeacon
 cp configs/config.example.yaml config.yaml
 # Configure the broker, ID, paths and example service checks.
 ./bin/labbeacon -config config.yaml -check-config
@@ -315,6 +315,11 @@ are queried, including stopped ones. A list or inspect error discards that Docke
 cycle so incomplete inventory is not reported as complete. For large inventories,
 consider the Docker timeout and broker payload limit.
 
+Docker CPU/RAM collection uses up to eight concurrent requests, each with its own
+`modules.docker.timeout` budget. A slow container does not consume the timeout
+for the remaining containers. Inventory uses a separate timeout budget.
+The overall polling interval still bounds the collection cycle.
+
 Network throughput is the difference between two byte counters divided by actual
 elapsed time. An interface's first observation only establishes a baseline;
 counter resets yield 0 instead of an overflow. All reported interfaces, including
@@ -418,14 +423,14 @@ against an **isolated test broker without authentication**. This test uses the I
 `integration` and publishes discovery/availability to that broker.
 
 CI runs builds, vet, tests with the race detector, a Mosquitto test and Linux cross
-builds, plus Windows build/tests and a container build. Tags such as `v0.3.1`
+builds, plus Windows build/tests and a container build. Tags such as `v0.3.2`
 trigger a multi-architecture build (`linux/amd64`, `linux/arm64`) and push to
 `ghcr.io/<owner>/<repo>`. The image exists only after a successful workflow. Make
 the GHCR package public if public access is intended.
 
 ```sh
-git tag v0.3.1
-git push origin v0.3.1
+git tag v0.3.2
+git push origin v0.3.2
 ```
 
 Architecture: `internal/module.Module` exposes `Name()`, `Enabled()` and

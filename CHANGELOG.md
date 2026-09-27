@@ -5,6 +5,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-27
+
+### Fixed
+- Docker stats use bounded parallel requests with individual timeouts instead of
+  sharing an expiring inventory timeout across every container.
+
 ## [0.3.1] - 2026-09-27
 
 ### Fixed

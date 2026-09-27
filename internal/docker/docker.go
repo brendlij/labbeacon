@@ -108,12 +108,13 @@ type Collector struct {
 
 func (c *Collector) Collect(ctx context.Context) ([]metric.Sample, error) {
 	c.Snapshot = nil
-	ctx, cancel := context.WithTimeout(ctx, c.Timeout)
-	defer cancel()
-	containers, err := c.API.Containers(ctx)
+	inventoryCtx, cancel := context.WithTimeout(ctx, c.Timeout)
+	containers, err := c.API.Containers(inventoryCtx)
+	cancel()
 	if err != nil {
 		return nil, err
 	}
+	statsResults := c.collectStats(ctx, containers)
 	running := 0
 	var extra []metric.Sample
 	var errs []error
@@ -125,10 +126,8 @@ func (c *Collector) Collect(ctx context.Context) ([]metric.Sample, error) {
 		key := "container_" + metric.Key(v.ID)
 		extra = append(extra, metric.Sensor(key+"_restarts", v.Name+" restart count", "", v.RestartCount))
 		if c.Config.Stats && v.Status == "running" {
-			if api, ok := c.API.(interface {
-				Stats(context.Context, string) (Stats, error)
-			}); ok {
-				stats, e := api.Stats(ctx, v.ID)
+			if statsResults != nil {
+				stats, e := statsResults[i].stats, statsResults[i].err
 				if e != nil {
 					errs = append(errs, fmt.Errorf("stats %s: %w", v.Name, e))
 				} else {
