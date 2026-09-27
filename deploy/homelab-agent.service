@@ -14,6 +14,7 @@ RestartSec=5
 TimeoutStopSec=10
 NoNewPrivileges=true
 ProtectSystem=strict
+ReadWritePaths=/etc/homelab-agent
 ProtectHome=read-only
 PrivateTmp=true
 

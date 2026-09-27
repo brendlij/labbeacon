@@ -4,7 +4,7 @@ services:
     build:
       context: .
       args:
-        VERSION: 0.2.0
+        VERSION: 0.3.0
     image: homelab-agent:local
     restart: unless-stopped
     network_mode: host
@@ -15,8 +15,6 @@ services:
     security_opt: [no-new-privileges:true]
     stop_grace_period: 10s
     environment:
-      MQTT_USER: ${MQTT_USER:-}
-      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
       HOST_PROC: /hostfs/proc
       HOST_SYS: /hostfs/sys
       HOST_ETC: /hostfs/etc
@@ -24,9 +22,9 @@ services:
       HOST_RUN: /hostfs/run
     volumes:
       - type: bind
-        source: ./configs/config.yaml
-        target: /etc/homelab-agent/config.yaml
-        read_only: true
+        source: ./config-data
+        target: /etc/homelab-agent
+        read_only: false
         bind:
           create_host_path: false
       - type: bind

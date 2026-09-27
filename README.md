@@ -1,7 +1,7 @@
 # homelab-agent
 
 Ein kleines Go-Binary pro Server: Systemmetriken, Docker-Inventar und Service-Checks
-per MQTT an Home Assistant, mit optionalen Steuerungsbuttons ab 0.2.0. Jeder Agent erscheint durch MQTT Discovery als eigenes
+per MQTT an Home Assistant, mit optionalen Steuerungsbuttons und eingebauter Web-UI ab 0.3.0. Jeder Agent erscheint durch MQTT Discovery als eigenes
 Gerät. Linux ist die primäre Zielplattform; das Binary baut auch unter Windows.
 
 **Voraussetzungen:** erreichbarer MQTT-Broker, aktivierte MQTT-Integration in Home
@@ -17,10 +17,13 @@ Das Compose-Beispiel baut direkt aus dem geklonten Repository.
 Im geklonten Repository:
 
 ```sh
-cp configs/config.docker.example.yaml configs/config.yaml
-cp .env.example .env
-# configs/config.yaml: eindeutige agent.id, agent.name und mqtt.broker eintragen.
-# .env: MQTT_USER und MQTT_PASSWORD eintragen (oder leer lassen).
+mkdir -p config-data
+cp configs/config.docker.example.yaml config-data/config.yaml
+# config-data/config.yaml: agent.id, agent.name und mqtt.broker eintragen.
+# Für atomare UI-Saves braucht die Container-UID Schreibrechte am Verzeichnis:
+sudo chown -R 65532:65532 config-data
+sudo chmod 700 config-data
+sudo chmod 600 config-data/config.yaml
 docker compose run --rm homelab-agent -config /etc/homelab-agent/config.yaml -check-config
 docker compose up -d --build
 docker compose logs -f
@@ -40,7 +43,7 @@ Datenträger als `/hostfs/mnt/data` in `disk_paths` ergänzen. Der Bind-Mount ve
 Docker Desktop zeigt die Linux-VM, nicht das Windows-/macOS-Hostsystem.
 
 Der Container läuft als UID/GID 65532 ohne Linux-Capabilities. Die Config muss für
-diese UID lesbar sein. Die eingebundenen Host-Verzeichnisse gewähren Lesezugriff auf
+diese UID lesbar und für UI-Saves samt Verzeichnis schreibbar sein. Die eingebundenen Host-Verzeichnisse gewähren Lesezugriff auf
 Hostdaten; das ist ein Monitoring-Container für vertrauenswürdige Hosts.
 
 ### Docker-Inventar aktivieren
@@ -63,10 +66,8 @@ POST-Aufrufe für start/stop/restart frei. Socket-Zugriff ist eine weitreichende
 ## Schnellstart als Binary
 
 ```sh
-go build -trimpath -ldflags="-s -w -X homelab-agent/internal/version.Version=0.2.0" -o bin/homelab-agent ./cmd/homelab-agent
+go build -trimpath -ldflags="-s -w -X homelab-agent/internal/version.Version=0.3.0" -o bin/homelab-agent ./cmd/homelab-agent
 cp configs/config.example.yaml config.yaml
-export MQTT_USER=''
-export MQTT_PASSWORD=''
 # Config bearbeiten: Broker, ID, Pfade und die Beispiel-Service-Checks anpassen.
 ./bin/homelab-agent -config config.yaml -check-config
 ./bin/homelab-agent -config config.yaml
@@ -85,21 +86,100 @@ Eine Unit liegt in `deploy/homelab-agent.service`. Beispielinstallation nach dem
 ```sh
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin homelab-agent
 sudo install -m 0755 bin/homelab-agent /usr/local/bin/homelab-agent
-sudo install -d -m 0750 -o root -g homelab-agent /etc/homelab-agent
-sudo install -m 0640 -o root -g homelab-agent config.yaml /etc/homelab-agent/config.yaml
+sudo install -d -m 0700 -o homelab-agent -g homelab-agent /etc/homelab-agent
+sudo install -m 0600 -o homelab-agent -g homelab-agent config.yaml /etc/homelab-agent/config.yaml
 sudo install -m 0644 deploy/homelab-agent.service /etc/systemd/system/
 ```
 
-In `/etc/homelab-agent/environment` `MQTT_USER=...` und `MQTT_PASSWORD=...` ablegen
-(root-eigene Datei, Modus 0600), dann `sudo systemctl daemon-reload` und
+Optional in `/etc/homelab-agent/environment` `MQTT_USER=...` und `MQTT_PASSWORD=...`
+ablegen (diese ENV-Overrides sperren die entsprechenden UI-Felder), dann `sudo systemctl daemon-reload` und
 `sudo systemctl enable --now homelab-agent` ausführen. Für das Docker-Modul benötigt
 der Dienstbenutzer Zugriff auf die Docker-Socket-Gruppe. Für VPN-CLI-Abfragen müssen
 die jeweiligen lokalen Daemon-Sockets erreichbar sein.
 
+## Web-UI
+
+Nach dem Start unter **http://127.0.0.1:8011/** erreichbar, auch wenn MQTT gerade
+nicht verbunden ist. Übersicht und MQTT-/Modulstatus aktualisieren sich alle fünf
+Sekunden. Grün bedeutet erfolgreiche Sammlung, rot einen Fehler; deaktivierte oder
+noch nicht geprüfte Module bleiben grau. Fehlgeschlagene einzelne Service-Checks
+sind reguläre Messergebnisse; die Modulampel zeigt die Sammlung, nicht die Erreichbarkeit
+jedes Ziels. Die Settings bieten Modulschalter, MQTT-Felder, einen HTTP/TCP-Service-Editor
+und Docker-Allow-/Deny-Checklisten aus dem letzten erfolgreichen Inventar.
+
+> Screenshot-Platzhalter: Web-UI mit Modulampeln und MQTT-Verbindungsstatus.
+> Screenshot-Platzhalter: Settings mit Service-Editor und Docker-Freigaben.
+
+```yaml
+webui:
+  enabled: true
+  bind_address: 127.0.0.1
+  port: 8011
+  username: ""
+  password: ""
+  allowed_hosts: []
+```
+
+Für bewussten LAN-Zugriff `bind_address: 0.0.0.0` (oder eine konkrete LAN-IP),
+`username: admin` und `password: "${WEBUI_PASSWORD}"` setzen. Username und Passwort
+müssen gemeinsam gesetzt sein. Der Standard bleibt auch mit Authentifizierung
+Loopback. Für DNS-Namen zusätzlich z. B. `allowed_hosts: [server.home.arpa]`
+setzen; damit weist die UI fremde Hostnamen gegen DNS-Rebinding ab.
+
+**Die UI nicht ungeschützt ins Internet exponieren.** Sie kann Konfiguration,
+Steuerungsfreigaben und gespeicherte Secrets zugänglich machen. Basic Auth über HTTP
+verschlüsselt nicht. Für Fernzugriff vorzugsweise Loopback belassen und einen SSH-Tunnel
+verwenden: `ssh -L 8011:127.0.0.1:8011 user@server`, danach lokal öffnen.
+TLS-Terminierung durch Reverse-Proxies ist derzeit nicht konfiguriert; die UI wertet
+keine Forwarded-Header aus und prüft POST-Origin gegen die direkte Verbindung.
+
+`control_actions.enabled` ist der gemeinsame Hauptschalter für alle Steuerungen.
+Er ist für Kompatibilität mit 0.2.0 standardmäßig `true`; jede einzelne Aktion bleibt
+weiterhin separat opt-in und standardmäßig deaktiviert. Abschalten erhält die
+Einzelfreigaben, unterbindet aber sämtliche Aktionen.
+
+**Speichern und Reload:** Poll-Intervall, `expire_after`, Service-Liste, Moduloptionen
+und Steuerungsfreigaben gelten nach dem laufenden Mess-/Steuerungszyklus ohne Neustart.
+MQTT-Verbindungseinstellungen, Agent-ID/-Name, Log-Level und Web-UI-Listener/Auth
+benötigen einen Neustart. Die UI listet diese Abweichungen ausdrücklich auf; bis dahin
+gelten die bisherigen Werte. Reload liest die Datei erneut, speichert aber keine
+ungesendeten Formularänderungen. Ungültige Dateien lassen die aktive Konfiguration
+unberührt. Änderungen an Host-Steuerung und `confirm_required` verlangen zusätzlich
+die Bestätigungscheckbox; das löst selbst keinen Reboot/Shutdown aus.
+
+POSTs verwenden signierte CSRF-Tokens und SameSite-Cookies. Gleichzeitige Änderungen
+werden über eine Dateirevision erkannt (409: Formular neu laden). Passwörter erscheinen
+nicht im Formular: leer lassen erhält den Wert, Löschen muss explizit gewählt werden.
+Direkte ENV-Overrides sind gesperrt. Unveränderte `${ENV}`-Referenzen bleiben beim
+Speichern erhalten; bearbeitete Werte werden als Literale gespeichert. Der YAML-Export
+enthält **gespeicherte Klartext-Secrets**, aber keine aufgelösten ENV-Referenzen; Backups
+entsprechend schützen. Für Übertragung auf andere Hosts die referenzierten Variablen
+dort ebenfalls setzen.
+
+**Dateirechte:** Der Agent schreibt eine temporäre Datei im selben Verzeichnis,
+synchronisiert sie und ersetzt die Config atomar. Linux-Dateimodus ist danach `0600`.
+Das Config-Verzeichnis muss dem Dienstbenutzer Schreibrechte geben; Symlinks als
+Config-Datei werden beim Speichern abgelehnt. Die systemd-Beispielunit erlaubt Schreiben
+nur unter `/etc/homelab-agent`. Eine extern verwaltete Datei kann bewusst read-only
+bleiben, dann funktionieren Übersicht/Export/Reload, aber kein UI-Save.
+
+**Docker / Upgrade von 0.2.0:** Ein einzelner Datei-Bind-Mount lässt sich nicht atomar
+ersetzen. Compose mountet deshalb das ganze `config-data`-Verzeichnis schreibbar; der
+übrige Container bleibt read-only. Vorhandene `configs/config.yaml` dorthin kopieren
+und UID/GID 65532 Schreibrechte geben (siehe Schnellstart). Compose injiziert keine
+leeren MQTT-ENV-Overrides mehr. Bei alten `${MQTT_USER}`/`${MQTT_PASSWORD}`-Referenzen
+entweder die Variablen ausdrücklich unter `environment` weiterreichen oder die Werte
+in YAML konfigurieren. Explizit weitergereichte Overrides bleiben in der UI gesperrt.
+
+Endpunkte: `GET /`, `GET /config`, `POST /config`, `GET /config/export` und
+`POST /config/reload`. HTML, CSS und Vanilla-JS liegen per `go:embed` im Binary;
+es ist keine Frontend-Toolchain erforderlich.
+
 ## Konfiguration
 
-Eine YAML-Datei ist die Quelle der Konfiguration; Änderungen erfordern einen
-Neustart. Unbekannte Felder, mehrere YAML-Dokumente, ungültige IDs, unzulässige
+Eine YAML-Datei ist die Quelle der Konfiguration. Die Web-UI speichert Änderungen
+und übernimmt Live-Einstellungen; externe Änderungen über „Reload ohne Neustart“ laden.
+Unbekannte Felder, mehrere YAML-Dokumente, ungültige IDs, unzulässige
 Check-Typen und fehlende Pflichtwerte werden beim Start abgelehnt. Datenmodule sind
 im Code standardmäßig deaktiviert, außer den eigenen Versions-/Uptime-Sensoren;
 die Beispieldateien aktivieren passende Module. Alle Steuerungsfunktionen sind deaktiviert.
@@ -143,7 +223,7 @@ Service-Felder:
 HTTP-Checks verwenden GET, prüfen genau den Statuscode und folgen keinen Redirects.
 TLS-Zertifikate werden geprüft. TCP-Checks prüfen den Verbindungsaufbau, nicht das
 Anwendungsprotokoll. Höchstens acht Services werden gleichzeitig geprüft. ICMP/Ping
-ist in 0.2.0 nicht implementiert; dadurch werden keine Raw-Socket-Rechte benötigt.
+ist nicht implementiert; dadurch werden keine Raw-Socket-Rechte benötigt.
 Module laufen parallel; ein Messdurchlauf hat maximal `poll_interval` Zeit. Bei
 vielen langsamen Checks Intervall und `expire_after` erhöhen. Nicht erhobene Werte
 werden nicht durch erfundene Nullwerte ersetzt, sondern laufen in HA ab.
@@ -153,8 +233,9 @@ werden nicht durch erfundene Nullwerte ersetzt, sondern laufen in HA ab.
 `${VARIABLE}` und `$VARIABLE` werden in YAML-Stringwerten expandiert, **nach** dem
 YAML-Parsing. Auch Passwörter mit Doppelpunkten oder Zeilenumbrüchen können daher
 keine YAML-Struktur einschleusen. Nicht gesetzte referenzierte Variablen sind ein
-Startfehler; explizit leere Variablen sind erlaubt. Bei einem Literal-Dollarzeichen
-den kompletten Wert über einen direkten ENV-Override übergeben.
+Startfehler; explizit leere Variablen sind erlaubt. Literal-Dollarzeichen als `$$`
+schreiben; die Web-UI übernimmt dieses Escaping automatisch. Direkte ENV-Overrides
+werden unverändert verwendet.
 
 Direkte Overrides nach dem Einlesen:
 
@@ -199,8 +280,8 @@ einschließlich Loopback und virtueller Interfaces erfasst.
 Tailscale/NetBird benötigen CLI **und** Zugriff auf ihren laufenden lokalen Daemon.
 Das Standardimage enthält beide CLIs nicht. Auf dem Host ausführen oder ein eigenes
 Image mit passender CLI und Daemon-Socket verwenden. Fehlt das Programm beim Start,
-wird nur dieses Modul deaktiviert und eine Warnung protokolliert. Nach Installation
-den Agent neu starten. CLI-Fehler/ungültiges JSON lassen bestehende Sensoren ablaufen;
+zeigt die Übersicht einen Modulfehler und der Agent protokolliert eine Warnung.
+Nach Installation die Konfiguration neu laden oder den Agent neu starten. CLI-Fehler/ungültiges JSON lassen bestehende Sensoren ablaufen;
 explizit gemeldete Offline-Zustände ergeben `OFF`. „Online Peers“ meint den von der
 VPN-Software gemeldeten Zustand, keinen zusätzlichen aktiven Ping.
 
@@ -300,13 +381,13 @@ verwendet die ID `integration` und schreibt Discovery/Availability auf diesem Br
 
 CI führt Build, Vet, Tests mit Race Detector, einen Mosquitto-Test und Linux-Cross-
 Builds aus; zusätzlich einen Windows-Build/Test und einen Container-Build. Tags wie
-`v0.2.0` lösen den Multi-Arch-Build (`linux/amd64`, `linux/arm64`) mit Push nach
+`v0.3.0` lösen den Multi-Arch-Build (`linux/amd64`, `linux/arm64`) mit Push nach
 `ghcr.io/<owner>/<repo>` aus. Erst nach einem erfolgreichen Workflow existiert dieses
 Image. Für öffentliche Nutzung ggf. die GHCR-Package-Sichtbarkeit auf public setzen.
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Architektur: `internal/module.Module` besitzt `Name()`, `Enabled()` und `Collect(ctx)`.

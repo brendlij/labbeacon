@@ -5,6 +5,24 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-27
+
+### Added
+- Embedded HTTP settings UI with module/MQTT status refreshed every five seconds.
+- Service editor, module switches and Docker control allow/deny inventory checklists.
+- Validated atomic YAML persistence, download/export, manual reload and stale-form protection.
+- Live configuration updates with explicit restart notices for MQTT, identity and UI settings.
+- Loopback default, optional Basic Auth, CSRF tokens, origin/host checks and explicit
+  acknowledgment for host-control/confirmation changes.
+- Persistence, security and runtime integration tests for the web configuration flow.
+
+### Changed
+- Monitoring and HTTP startup remain available while MQTT reconnects.
+- Unchanged ENV references/comments survive saves; password fields are never prefilled.
+- Compose mounts a writable config directory for atomic saves; systemd grants a scoped
+  writable config path. Default Compose no longer injects blank MQTT credential overrides.
+- Literal dollar signs in YAML strings use `$$`.
+
 ## [0.2.0] - 2026-09-27
 
 ### Added

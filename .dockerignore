@@ -6,3 +6,6 @@ config.yaml
 configs/config.yaml
 .env
 *.out
+
+config-data
+.homelab-config-*.tmp

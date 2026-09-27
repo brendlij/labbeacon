@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"homelab-agent/internal/control"
 	"homelab-agent/internal/metric"
@@ -35,7 +36,31 @@ func (r Registration) Actions(ctx context.Context) ([]control.Entry, error) {
 	return nil, nil
 }
 
-type Registry struct{ modules []Module }
+type Status struct {
+	Name        string
+	Enabled     bool
+	LastChecked time.Time
+	LastError   string
+}
+type Registry struct {
+	modules []Module
+	mu      sync.Mutex
+	status  map[string]Status
+}
+
+func (r *Registry) Status() []Status {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]Status, 0, len(r.modules))
+	for _, m := range r.modules {
+		out = append(out, r.status[m.Name()])
+	}
+	return out
+}
+
+type Unavailable struct{ Reason error }
+
+func (u Unavailable) Collect(context.Context) ([]metric.Sample, error) { return nil, u.Reason }
 
 func (r *Registry) Actions(ctx context.Context, report func(string, error)) []control.Entry {
 	var out []control.Entry
@@ -63,6 +88,10 @@ func (r *Registry) Register(m Module) error {
 		}
 	}
 	r.modules = append(r.modules, m)
+	if r.status == nil {
+		r.status = map[string]Status{}
+	}
+	r.status[m.Name()] = Status{Name: m.Name(), Enabled: m.Enabled()}
 	return nil
 }
 func (r *Registry) Collect(ctx context.Context, report func(string, error)) []metric.Sample {
@@ -77,6 +106,15 @@ func (r *Registry) Collect(ctx context.Context, report func(string, error)) []me
 		go func() {
 			defer wg.Done()
 			values, err := m.Collect(ctx)
+			r.mu.Lock()
+			status := r.status[m.Name()]
+			status.LastChecked = time.Now()
+			status.LastError = ""
+			if err != nil {
+				status.LastError = err.Error()
+			}
+			r.status[m.Name()] = status
+			r.mu.Unlock()
 			if err != nil {
 				report(m.Name(), err)
 			}

@@ -39,6 +39,7 @@ func TestAgentRestartGraceful(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cfg := config.Defaults()
+	cfg.WebUI.Enabled = false
 	cfg.Agent.ID = "restart-test"
 	cfg.Agent.Name = "Restart Test"
 	cfg.Agent.PollInterval = time.Second

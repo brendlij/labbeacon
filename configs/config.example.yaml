@@ -22,8 +22,8 @@ agent_control:
   enabled: false # Needs systemd Restart=on-failure or a container restart policy.
 mqtt:
   broker: tcp://192.168.1.10:1883
-  username: "${MQTT_USER}"
-  password: "${MQTT_PASSWORD}"
+  username: ""
+  password: ""
   discovery_prefix: homeassistant
 modules:
   system:
@@ -78,3 +78,16 @@ modules:
       endpoint: https://api.ipify.org
       interval: 15m
       timeout: 5s
+
+# Embedded settings UI; explicit LAN binding is optional.
+webui:
+  enabled: true
+  bind_address: 127.0.0.1
+  port: 8011
+  username: ""
+  password: ""
+  allowed_hosts: [] # Exact DNS names, e.g. [server.home.arpa]; IPs work without this.
+
+# Master gate; individual actions above remain opt-in.
+control_actions:
+  enabled: true

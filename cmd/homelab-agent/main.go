@@ -63,10 +63,13 @@ func run() error {
 	slog.SetDefault(log)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return serve(ctx, cfg, log)
+	return serve(ctx, cfg, log, *path)
 }
 
 func registered(cfg config.Config, client *mqtt.Client, log *slog.Logger) (*module.Registry, error) {
+	if !cfg.ControlActions.Enabled {
+		cfg.Modules.Docker.ControlContainers.Enabled = false
+	}
 	systemCollector := system.New(cfg.Modules.System.DiskPaths)
 	systemCollector.Options = cfg.Modules.System
 	dockerClient := docker.NewClient(cfg.Modules.Docker.SocketPath, cfg.Modules.Docker.Timeout)
@@ -80,11 +83,13 @@ func registered(cfg config.Config, client *mqtt.Client, log *slog.Logger) (*modu
 	}
 	for name, cli := range map[string]config.CLI{"tailscale": cfg.Modules.Tailscale, "netbird": cfg.Modules.Netbird} {
 		if !cli.Enabled {
+			modules = append(modules, module.Registration{ModuleName: name, Active: false})
 			continue
 		}
 		resolved, e := exec.LookPath(cli.Command)
 		if e != nil {
-			log.Warn("module disabled: CLI not found", "module", name, "command", cli.Command)
+			log.Warn("module unavailable: CLI not found", "module", name, "command", cli.Command)
+			modules = append(modules, module.Registration{ModuleName: name, Active: true, Collector: module.Unavailable{Reason: fmt.Errorf("CLI nicht gefunden: %s", cli.Command)}})
 			continue
 		}
 		r := module.Registration{ModuleName: name, Active: true}
@@ -102,111 +107,4 @@ func registered(cfg config.Config, client *mqtt.Client, log *slog.Logger) (*modu
 		}
 	}
 	return registry, nil
-}
-func serve(ctx context.Context, cfg config.Config, log *slog.Logger) error {
-	client := mqtt.New(cfg, log)
-	registry, err := registered(cfg, client, log)
-	if err != nil {
-		return err
-	}
-	manager := control.New(log)
-	static := append(control.HostEntries(cfg.HostControl, command.Exec{}), control.ServiceEntries(cfg.Modules.Services, command.Exec{})...)
-	if cfg.AgentControl.Enabled {
-		static = append(static, control.Entry{Name: "Agent restart", Module: "agent", Action: control.Function{Key: "agent_restart", Run: func(context.Context) error { return control.ErrRestart }}})
-	}
-	var ready []control.Entry
-	for _, e := range static {
-		preflight, cancel := context.WithTimeout(ctx, 5*time.Second)
-		var err error
-		if e.Check != nil {
-			err = e.Check(preflight)
-		}
-		cancel()
-		if err != nil {
-			log.Warn("control unavailable", "action", e.Action.ID(), "module", e.Module, "error", err)
-		} else {
-			ready = append(ready, e)
-		}
-	}
-	probe, cancel := context.WithTimeout(ctx, 5*time.Second)
-	registry.Actions(probe, func(name string, e error) { log.Warn("control unavailable at startup", "module", name, "error", e) })
-	cancel()
-	defer func() {
-		shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if e := client.Close(shutdown); e != nil {
-			log.Warn("offline announcement failed", "error", e)
-		}
-	}()
-	if err = client.Connect(ctx, log); err != nil {
-		if errors.Is(err, context.Canceled) {
-			return nil
-		}
-		return err
-	}
-	syncActions := func() error {
-		controls, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		entries := append([]control.Entry{}, ready...)
-		entries = append(entries, registry.Actions(controls, func(name string, e error) { log.Warn("control unavailable", "module", name, "error", e) })...)
-		if e := manager.Replace(entries); e != nil {
-			return e
-		}
-		return client.SyncActions(controls, entries)
-	}
-	poll := func() {
-		cycle, cancel := context.WithTimeout(ctx, cfg.Agent.PollInterval)
-		samples := registry.Collect(cycle, func(name string, e error) {
-			if ctx.Err() == nil {
-				log.Warn("collection incomplete", "module", name, "error", e)
-			}
-		})
-		cancel()
-		if e := syncActions(); e != nil && ctx.Err() == nil {
-			log.Warn("control discovery failed", "error", e)
-		}
-		publishCtx, done := context.WithTimeout(ctx, 5*time.Second)
-		defer done()
-		if e := client.Publish(publishCtx, samples); e != nil && ctx.Err() == nil {
-			log.Warn("publish failed", "error", e)
-		}
-	}
-	log.Info("agent started", "id", cfg.Agent.ID, "version", version.Version)
-	ticker := time.NewTicker(cfg.Agent.PollInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("shutting down")
-			return nil
-		case <-client.Wake:
-			online, done := context.WithTimeout(ctx, 5*time.Second)
-			if e := client.Online(online); e != nil && ctx.Err() == nil {
-				log.Warn("online announcement failed", "error", e)
-			}
-			done()
-			poll()
-		case request := <-client.Commands:
-			previousAttempt := manager.Last[request.ID]
-			timeout := 30 * time.Second
-			if entry, ok := manager.Entries[request.ID]; ok && entry.Module == "host_control" {
-				timeout = cfg.HostControl.Timeout
-			}
-			actionCtx, done := context.WithTimeout(ctx, timeout)
-			e := manager.Execute(actionCtx, request, client.Session(), client.Announce)
-			done()
-			if errors.Is(e, control.ErrRestart) {
-				return e
-			}
-			if e == nil && (request.ID == "host_reboot" || request.ID == "host_shutdown") {
-				return nil
-			}
-			if manager.Last[request.ID] != previousAttempt {
-				client.RotateSession()
-				poll()
-			}
-		case <-ticker.C:
-			poll()
-		}
-	}
 }

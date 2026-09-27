@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	paho "github.com/eclipse/paho.mqtt.golang"
@@ -30,6 +31,7 @@ type Publisher interface {
 	Publish(string, byte, bool, interface{}) paho.Token
 }
 type Client struct {
+	expiry    atomic.Int64
 	controlMu sync.RWMutex
 	session   string
 	Commands  chan control.Request
@@ -43,6 +45,7 @@ type Client struct {
 
 func New(cfg config.Config, log *slog.Logger) *Client {
 	c := &Client{cfg: cfg, Wake: make(chan struct{}, 1), Commands: make(chan control.Request, 8), buttons: map[string]bool{}, observed: map[string]bool{}, log: log}
+	c.expiry.Store(int64(cfg.Agent.ExpireAfter))
 	opts := paho.NewClientOptions().AddBroker(cfg.MQTT.Broker).SetClientID("homelab-agent-"+cfg.Agent.ID).
 		SetUsername(cfg.MQTT.Username).SetPassword(cfg.MQTT.Password).
 		SetCleanSession(true).SetAutoReconnect(true).SetMaxReconnectInterval(30*time.Second).
@@ -154,12 +157,16 @@ func (c *Client) Publish(ctx context.Context, samples []metric.Sample) error {
 		return err
 	}
 	for _, s := range samples {
-		if err := PublishSample(ctx, c.client, c.cfg, s); err != nil {
+		cfg := c.cfg
+		cfg.Agent.ExpireAfter = time.Duration(c.expiry.Load())
+		if err := PublishSample(ctx, c.client, cfg, s); err != nil {
 			return fmt.Errorf("publish %s: %w", s.Key, err)
 		}
 	}
 	return nil
 }
+func (c *Client) SetExpiry(d time.Duration) { c.expiry.Store(int64(d)) }
+func (c *Client) Connected() bool           { return c.client.IsConnectionOpen() }
 
 // Online announces availability before the potentially slower collection cycle.
 func (c *Client) Online(ctx context.Context) error {

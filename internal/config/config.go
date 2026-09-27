@@ -74,16 +74,22 @@ type Modules struct {
 	Tailscale CLI      `yaml:"tailscale"`
 	Netbird   CLI      `yaml:"netbird"`
 }
+type ControlActions struct {
+	Enabled bool `yaml:"enabled"`
+}
+
 type Config struct {
-	HostControl  HostControl  `yaml:"host_control"`
-	AgentControl AgentControl `yaml:"agent_control"`
-	Agent        Agent        `yaml:"agent"`
-	MQTT         MQTT         `yaml:"mqtt"`
-	Modules      Modules      `yaml:"modules"`
+	ControlActions ControlActions `yaml:"control_actions"`
+	WebUI          WebUI          `yaml:"webui"`
+	HostControl    HostControl    `yaml:"host_control"`
+	AgentControl   AgentControl   `yaml:"agent_control"`
+	Agent          Agent          `yaml:"agent"`
+	MQTT           MQTT           `yaml:"mqtt"`
+	Modules        Modules        `yaml:"modules"`
 }
 
 func Defaults() Config {
-	return Config{Agent: Agent{PollInterval: 20 * time.Second, ExpireAfter: 60 * time.Second, LogLevel: "info", MetricsEnabled: true},
+	return Config{ControlActions: ControlActions{Enabled: true}, WebUI: WebUI{Enabled: true, BindAddress: "127.0.0.1", Port: 8011}, Agent: Agent{PollInterval: 20 * time.Second, ExpireAfter: 60 * time.Second, LogLevel: "info", MetricsEnabled: true},
 		MQTT: MQTT{DiscoveryPrefix: "homeassistant"}, Modules: Modules{
 			System: System{DiskPaths: []string{"/"}, TopN: 5}, Docker: Docker{SocketPath: "/var/run/docker.sock", Timeout: 5 * time.Second, ImageUpdates: ImageUpdates{Interval: 6 * time.Hour, Timeout: 5 * time.Second}},
 			Network:   Network{LocalIPs: true, PublicIP: PublicIP{Endpoint: "https://api.ipify.org", Interval: 15 * time.Minute, Timeout: 5 * time.Second}},
@@ -95,13 +101,17 @@ func Defaults() Config {
 func expand(n *yaml.Node) error {
 	if n.Kind == yaml.ScalarNode && n.Tag == "!!str" {
 		var missing string
-		n.Value = os.Expand(n.Value, func(k string) string {
-			v, ok := os.LookupEnv(k)
-			if !ok {
-				missing = k
-			}
-			return v
-		})
+		parts := strings.Split(n.Value, "$$")
+		for i, part := range parts {
+			parts[i] = os.Expand(part, func(k string) string {
+				v, ok := os.LookupEnv(k)
+				if !ok {
+					missing = k
+				}
+				return v
+			})
+		}
+		n.Value = strings.Join(parts, "$")
 		if missing != "" {
 			return fmt.Errorf("environment variable %s is not set", missing)
 		}
@@ -114,11 +124,17 @@ func expand(n *yaml.Node) error {
 	return nil
 }
 func Load(path string) (Config, error) {
-	c := Defaults()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return c, fmt.Errorf("read config: %w", err)
+		return Config{}, fmt.Errorf("read config: %w", err)
 	}
+	return Parse(data)
+}
+
+// Parse uses the same validation and environment resolution for startup and UI writes.
+func Parse(data []byte) (Config, error) {
+	c := Defaults()
+	var err error
 	var root yaml.Node
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	if err = dec.Decode(&root); err != nil {
@@ -153,6 +169,12 @@ func Load(path string) (Config, error) {
 			}
 		}
 	}
+	c.ApplyCheckDefaults()
+	return c, c.Validate()
+}
+
+// ApplyCheckDefaults keeps omitted check values consistent across YAML and forms.
+func (c *Config) ApplyCheckDefaults() {
 	for i := range c.Modules.Services.Checks {
 		ch := &c.Modules.Services.Checks[i]
 		if ch.Timeout == 0 {
@@ -162,12 +184,14 @@ func Load(path string) (Config, error) {
 			ch.ExpectedStatus = 200
 		}
 	}
-	return c, c.Validate()
 }
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 func (c Config) Validate() error {
+	if err := c.WebUI.Validate(); err != nil {
+		return err
+	}
 	if !idPattern.MatchString(c.Agent.ID) {
 		return errors.New("agent.id must contain only letters, digits, underscores or hyphens")
 	}
