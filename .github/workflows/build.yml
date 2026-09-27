@@ -31,6 +31,17 @@ jobs:
           MQTT_TEST_BROKER=tcp://127.0.0.1:18884 go test -race -count=1 ./internal/mqtt -run TestBrokerIntegration
       - name: Container build
         run: docker build -t labbeacon:test .
+      - name: Setup and bundled Tailscale smoke test
+        run: |
+          sh -n deploy/setup.sh
+          docker run --rm --entrypoint sh labbeacon:test -c 'tailscale version'
+          sudo sh deploy/setup.sh --lan /tmp/labbeacon-setup-smoke > /tmp/labbeacon-setup.log
+          sudo docker compose -f /tmp/labbeacon-setup-smoke/compose.generated.yaml config --quiet
+          sudo docker run --rm -v /tmp/labbeacon-setup-smoke:/etc/labbeacon labbeacon:test -check-config
+          sudo grep -F "group_add: [\"$(stat -c '%g' /var/run/docker.sock)\"]" /tmp/labbeacon-setup-smoke/compose.generated.yaml
+          sudo sh -c 'sha256sum /tmp/labbeacon-setup-smoke/config.yaml > /tmp/labbeacon-config-before'
+          if sudo sh deploy/setup.sh --lan /tmp/labbeacon-setup-smoke > /dev/null 2>&1; then exit 1; fi
+          sudo sha256sum -c /tmp/labbeacon-config-before
   windows:
     runs-on: windows-latest
     steps:

@@ -4,7 +4,7 @@ services:
     build:
       context: .
       args:
-        VERSION: 0.4.0
+        VERSION: 0.4.1
     image: labbeacon:local
     restart: unless-stopped
     network_mode: host

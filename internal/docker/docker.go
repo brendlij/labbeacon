@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -48,6 +49,12 @@ func (c *Client) get(ctx context.Context, path string, v any) error {
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("Docker socket missing: mount the host socket at the configured socket_path (default /var/run/docker.sock), then redeploy: %w", err)
+		}
+		if errors.Is(err, os.ErrPermission) {
+			return fmt.Errorf("Docker socket permission denied: add its numeric host group with Compose group_add (stat -c %%g /var/run/docker.sock), then redeploy: %w", err)
+		}
 		return err
 	}
 	defer resp.Body.Close()

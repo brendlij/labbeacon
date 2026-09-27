@@ -38,7 +38,7 @@ modules:
     enabled: false
     socket_path: /var/run/docker.sock
     timeout: 5s
-    stats: false # Increase timeout for many containers (stats can take ~1s each).
+    stats: false # Eight parallel requests, each with its own timeout.
     control_containers:
       enabled: false
       allow: [] # Empty: all names, but only when control is explicitly enabled.
@@ -65,6 +65,7 @@ modules:
   tailscale:
     enabled: false
     command: tailscale
+    socket_path: "" # Auto-detect local or HOST_RUN/tailscale/tailscaled.sock.
     timeout: 5s
   netbird:
     enabled: false

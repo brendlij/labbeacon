@@ -81,7 +81,7 @@ func registered(cfg config.Config, client *mqtt.Client, log *slog.Logger) (*modu
 		module.Registration{ModuleName: "network", Active: cfg.Modules.Network.Enabled, Collector: network.New(cfg.Modules.Network)},
 		module.Registration{ModuleName: "agent", Active: cfg.Agent.MetricsEnabled, Collector: &agent.Collector{Started: started, Session: client.Session}},
 	}
-	for name, cli := range map[string]config.CLI{"tailscale": cfg.Modules.Tailscale, "netbird": cfg.Modules.Netbird} {
+	for name, cli := range map[string]config.CLI{"tailscale": cfg.Modules.Tailscale.CLI, "netbird": cfg.Modules.Netbird} {
 		if !cli.Enabled {
 			modules = append(modules, module.Registration{ModuleName: name, Active: false})
 			continue
@@ -89,12 +89,12 @@ func registered(cfg config.Config, client *mqtt.Client, log *slog.Logger) (*modu
 		resolved, e := exec.LookPath(cli.Command)
 		if e != nil {
 			log.Warn("module unavailable: CLI not found", "module", name, "command", cli.Command)
-			modules = append(modules, module.Registration{ModuleName: name, Active: true, Collector: module.Unavailable{Reason: fmt.Errorf("CLI not found: %s", cli.Command)}})
+			modules = append(modules, module.Registration{ModuleName: name, Active: true, Collector: module.Unavailable{Reason: fmt.Errorf("CLI not found: %s. Install the CLI on native hosts; use the current LabBeacon image for Tailscale. NetBird requires a custom image with its CLI and daemon connection", cli.Command)}})
 			continue
 		}
 		r := module.Registration{ModuleName: name, Active: true}
 		if name == "tailscale" {
-			r.Collector = &tailscale.Collector{Runner: command.Exec{}, Command: resolved, Timeout: cli.Timeout}
+			r.Collector = &tailscale.Collector{Runner: command.Exec{}, Command: resolved, Timeout: cli.Timeout, SocketPath: cfg.Modules.Tailscale.SocketPath}
 		} else {
 			r.Collector = &netbird.Collector{Runner: command.Exec{}, Command: resolved, Timeout: cli.Timeout}
 		}

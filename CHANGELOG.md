@@ -5,6 +5,19 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-27
+
+### Fixed
+- Bundled Tailscale CLI in the image, automatic host socket detection through
+  HOST_RUN, and an explicit socket-path setting for shared daemon sockets.
+- Actionable Docker socket permission/mount errors and VPN setup guidance.
+
+### Added
+- First-run Linux setup script generating persistent configuration and Komodo
+  Compose with detected Docker GID, host identity, random login credentials,
+  and discovered Docker/Tailscale monitoring. Existing config is preserved.
+- Container/setup smoke checks in CI.
+
 ## [0.4.0] - 2026-09-27
 
 ### Added

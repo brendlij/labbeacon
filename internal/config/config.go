@@ -51,6 +51,11 @@ type CLI struct {
 	Command string        `yaml:"command"`
 	Timeout time.Duration `yaml:"timeout"`
 }
+type Tailscale struct {
+	CLI        `yaml:",inline"`
+	SocketPath string `yaml:"socket_path"`
+}
+
 type Check struct {
 	Name           string        `yaml:"name"`
 	Type           string        `yaml:"type"`
@@ -67,12 +72,12 @@ type Services struct {
 	Checks  []Check `yaml:"checks"`
 }
 type Modules struct {
-	Network   Network  `yaml:"network"`
-	System    System   `yaml:"system"`
-	Docker    Docker   `yaml:"docker"`
-	Services  Services `yaml:"services"`
-	Tailscale CLI      `yaml:"tailscale"`
-	Netbird   CLI      `yaml:"netbird"`
+	Network   Network   `yaml:"network"`
+	System    System    `yaml:"system"`
+	Docker    Docker    `yaml:"docker"`
+	Services  Services  `yaml:"services"`
+	Tailscale Tailscale `yaml:"tailscale"`
+	Netbird   CLI       `yaml:"netbird"`
 }
 type ControlActions struct {
 	Enabled bool `yaml:"enabled"`
@@ -93,7 +98,7 @@ func Defaults() Config {
 		MQTT: MQTT{DiscoveryPrefix: "homeassistant"}, Modules: Modules{
 			System: System{DiskPaths: []string{"/"}, TopN: 5}, Docker: Docker{SocketPath: "/var/run/docker.sock", Timeout: 5 * time.Second, ImageUpdates: ImageUpdates{Interval: 6 * time.Hour, Timeout: 5 * time.Second}},
 			Network:   Network{LocalIPs: true, PublicIP: PublicIP{Endpoint: "https://api.ipify.org", Interval: 15 * time.Minute, Timeout: 5 * time.Second}},
-			Tailscale: CLI{Command: "tailscale", Timeout: 5 * time.Second}, Netbird: CLI{Command: "netbird", Timeout: 5 * time.Second}},
+			Tailscale: Tailscale{CLI: CLI{Command: "tailscale", Timeout: 5 * time.Second}}, Netbird: CLI{Command: "netbird", Timeout: 5 * time.Second}},
 		HostControl: HostControl{Timeout: 15 * time.Second, Reboot: CommandAction{Command: []string{"systemctl", "--no-ask-password", "reboot"}, Preflight: []string{"systemctl", "--no-ask-password", "show", "--property=Version", "--value"}, ConfirmRequired: true}, Shutdown: CommandAction{Command: []string{"systemctl", "--no-ask-password", "poweroff"}, Preflight: []string{"systemctl", "--no-ask-password", "show", "--property=Version", "--value"}, ConfirmRequired: true}}}
 }
 
@@ -240,7 +245,7 @@ func (c Config) Validate() error {
 	if c.Modules.Docker.Enabled && (c.Modules.Docker.SocketPath == "" || c.Modules.Docker.Timeout <= 0) {
 		return errors.New("docker requires socket_path and positive timeout")
 	}
-	for name, v := range map[string]CLI{"tailscale": c.Modules.Tailscale, "netbird": c.Modules.Netbird} {
+	for name, v := range map[string]CLI{"tailscale": c.Modules.Tailscale.CLI, "netbird": c.Modules.Netbird} {
 		if v.Enabled && (v.Command == "" || v.Timeout <= 0) {
 			return fmt.Errorf("%s requires command and positive timeout", name)
 		}

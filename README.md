@@ -38,6 +38,55 @@ still follow Docker container IDs, as in previous versions; recreating a contain
 can leave unavailable entities for the old ID. Those pre-existing stale entries
 are not automatically deleted by this grouping update.
 
+## Guided first-time Docker / Komodo setup
+
+Download the release's [deploy/setup.sh](deploy/setup.sh), review it, and run it
+on the Docker server (Linux). It only prepares files; it does not deploy anything:
+
+```sh
+sudo sh setup.sh --lan /srv/appdata/labbeacon
+sudo cat /srv/appdata/labbeacon/compose.generated.yaml
+```
+
+Paste the generated Compose into Komodo **UI Defined**, then Save, Pull Images,
+and Deploy. The script detects the Docker socket GID and includes both its mount
+and `group_add`; it never assumes a fixed group like 989. For rootless/custom
+Docker, pass `sudo DOCKER_SOCKET=/run/user/1000/docker.sock sh setup.sh ...`.
+Socket access grants powerful Docker permissions even with a read-only mount.
+
+New configuration uses the hostname for the agent name/ID, enables discovered
+Docker and host Tailscale monitoring, and creates a random web login password
+(printed once, also stored in the private config). Controls remain disabled.
+It creates the config directory/file with ownership for container UID 65532.
+An existing config is preserved; an existing generated Compose is not overwritten.
+
+`--lan` explicitly binds the UI to the LAN with authentication. Without it the UI
+stays on loopback; use the SSH tunnel below. After deployment, open port 8011,
+sign in as `admin` with the generated password, and set MQTT broker/credentials
+in Settings, save and restart. Initial broker default is `tcp://127.0.0.1:1883`;
+the UI remains available while MQTT is disconnected. No sample service checks
+are enabled against made-up addresses.
+
+### Tailscale in the container image
+
+The image includes the Tailscale CLI. It queries your existing daemon; it does
+not start another daemon, enroll a new node, or change your tailnet settings.
+When `modules.tailscale.enabled` is true, it detects a local socket or
+`HOST_RUN/tailscale/tailscaled.sock`. The host-monitoring Compose already sets
+`HOST_RUN=/hostfs/run`, so a normal host Tailscale installation needs no extra mount.
+If socket permissions prevent access, grant only the required group access.
+
+For Tailscale in a separate container, share its runtime socket directory with
+LabBeacon and set **Tailscale socket path** to the path inside LabBeacon, e.g.
+`/tailscale/tailscaled.sock`. You can also set
+`modules.tailscale.socket_path` in YAML. Do not share its private state directory
+or auth key. This follows the [Tailscale socket option](https://tailscale.com/kb/1080/cli).
+
+NetBird still requires a custom image containing its CLI and access to its daemon.
+Host/systemd controls require a native installation or separately configured
+commands; the Docker image does not silently grant host administration access.
+AdGuard is supported as an HTTP/TCP service check, not a native statistics integration.
+
 ## Quick start with Docker (Linux)
 
 On your Linux server, with Git and Docker Compose installed:
@@ -95,7 +144,7 @@ subject to the control master switch. Socket access grants extensive host permis
 ## Deploy with Komodo or another stack manager
 
 Use **UI Defined** in Komodo and paste [deploy/compose.ghcr.yaml](deploy/compose.ghcr.yaml)
-as the stack's Compose file. It pulls `ghcr.io/brendlij/labbeacon:0.4.0` instead of
+as the stack's Compose file. It pulls `ghcr.io/brendlij/labbeacon:0.4.1` instead of
 building from source. Save the stack configuration, then deploy it.
 
 First prepare the configuration **on the selected Docker server**, not inside the
@@ -127,7 +176,7 @@ problems: the stack manager needs the Compose definition, while the agent reads
 ## Quick start with the binary
 
 ```sh
-go build -trimpath -ldflags="-s -w -X github.com/brendlij/labbeacon/internal/version.Version=0.4.0" -o bin/labbeacon ./cmd/labbeacon
+go build -trimpath -ldflags="-s -w -X github.com/brendlij/labbeacon/internal/version.Version=0.4.1" -o bin/labbeacon ./cmd/labbeacon
 cp configs/config.example.yaml config.yaml
 # Configure the broker, ID, paths and example service checks.
 ./bin/labbeacon -config config.yaml -check-config
@@ -448,14 +497,14 @@ against an **isolated test broker without authentication**. This test uses the I
 `integration` and publishes discovery/availability to that broker.
 
 CI runs builds, vet, tests with the race detector, a Mosquitto test and Linux cross
-builds, plus Windows build/tests and a container build. Tags such as `v0.4.0`
+builds, plus Windows build/tests and a container build. Tags such as `v0.4.1`
 trigger a multi-architecture build (`linux/amd64`, `linux/arm64`) and push to
 `ghcr.io/<owner>/<repo>`. The image exists only after a successful workflow. Make
 the GHCR package public if public access is intended.
 
 ```sh
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.4.1
+git push origin v0.4.1
 ```
 
 Architecture: `internal/module.Module` exposes `Name()`, `Enabled()` and
