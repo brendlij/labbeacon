@@ -37,7 +37,7 @@ jobs:
           docker run --rm --entrypoint sh labbeacon:test -c 'tailscale version'
           sudo sh deploy/setup.sh --lan /tmp/labbeacon-setup-smoke > /tmp/labbeacon-setup.log
           sudo docker compose -f /tmp/labbeacon-setup-smoke/compose.generated.yaml config --quiet
-          sudo docker run --rm -v /tmp/labbeacon-setup-smoke:/etc/labbeacon labbeacon:test -check-config
+          sudo docker run --rm -v /tmp/labbeacon-setup-smoke:/etc/labbeacon labbeacon:test -config /etc/labbeacon/config.yaml -check-config
           sudo grep -F "group_add: [\"$(stat -c '%g' /var/run/docker.sock)\"]" /tmp/labbeacon-setup-smoke/compose.generated.yaml
           sudo sh -c 'sha256sum /tmp/labbeacon-setup-smoke/config.yaml > /tmp/labbeacon-config-before'
           if sudo sh deploy/setup.sh --lan /tmp/labbeacon-setup-smoke > /dev/null 2>&1; then exit 1; fi
