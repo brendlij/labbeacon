@@ -1,0 +1,42 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: test -z "$(gofmt -l cmd internal)"
+      - run: go mod verify
+      - run: go vet ./...
+      - run: go test -race -count=1 -cover ./...
+      - run: go build ./...
+      - name: Compile both Linux architectures
+        run: |
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -o /tmp/homelab-agent-$arch ./cmd/homelab-agent
+          done
+      - name: MQTT integration
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mosquitto
+          mosquitto -p 18884 > /tmp/mosquitto.log 2>&1 &
+          MQTT_TEST_BROKER=tcp://127.0.0.1:18884 go test -race -count=1 ./internal/mqtt -run TestBrokerIntegration
+      - name: Container build
+        run: docker build -t homelab-agent:test .
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: go build ./...

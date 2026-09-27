@@ -1,0 +1,21 @@
+[Unit]
+Description=Homelab metrics over MQTT
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=homelab-agent
+Group=homelab-agent
+EnvironmentFile=-/etc/homelab-agent/environment
+ExecStart=/usr/local/bin/homelab-agent -config /etc/homelab-agent/config.yaml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

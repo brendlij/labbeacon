@@ -1,0 +1,8 @@
+.git
+.cache
+bin
+dist
+config.yaml
+configs/config.yaml
+.env
+*.out

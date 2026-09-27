@@ -1,0 +1,31 @@
+agent:
+  id: srv-01
+  name: Server 1
+  poll_interval: 20s
+  expire_after: 60s
+  log_level: info
+mqtt:
+  broker: tcp://192.168.1.10:1883
+  username: "${MQTT_USER}"
+  password: "${MQTT_PASSWORD}"
+  discovery_prefix: homeassistant
+modules:
+  system:
+    enabled: true
+    # Paths are in the container namespace; /hostfs is the host root mount.
+    disk_paths: ["/hostfs"] # Example additional disk: /hostfs/mnt/data
+  docker:
+    enabled: false
+    socket_path: /var/run/docker.sock
+    timeout: 5s
+  services:
+    enabled: false
+    checks: []
+  tailscale:
+    enabled: false
+    command: tailscale
+    timeout: 5s
+  netbird:
+    enabled: false
+    command: netbird
+    timeout: 5s

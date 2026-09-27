@@ -1,0 +1,40 @@
+agent:
+  id: srv-01
+  name: Server 1
+  poll_interval: 20s
+  expire_after: 60s
+  log_level: info
+mqtt:
+  broker: tcp://192.168.1.10:1883
+  username: "${MQTT_USER}"
+  password: "${MQTT_PASSWORD}"
+  discovery_prefix: homeassistant
+modules:
+  system:
+    enabled: true
+    disk_paths: ["/"] # Add /mnt/data or other mounts here.
+  docker:
+    enabled: false
+    socket_path: /var/run/docker.sock
+    timeout: 5s
+  services:
+    enabled: true
+    checks:
+      - name: AdGuard
+        type: http
+        url: http://192.168.1.10:3000
+        expected_status: 200
+        timeout: 5s
+      - name: Herbst Dashboard
+        type: tcp
+        host: 192.168.1.10
+        port: 8081
+        timeout: 5s
+  tailscale:
+    enabled: false
+    command: tailscale
+    timeout: 5s
+  netbird:
+    enabled: false
+    command: netbird
+    timeout: 5s

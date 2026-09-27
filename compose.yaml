@@ -1,0 +1,42 @@
+# Linux host monitoring. Docker Desktop reports its Linux VM, not Windows/macOS.
+services:
+  homelab-agent:
+    build:
+      context: .
+      args:
+        VERSION: 0.1.0
+    image: homelab-agent:local
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    uts: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 10s
+    environment:
+      MQTT_USER: ${MQTT_USER:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      HOST_PROC: /hostfs/proc
+      HOST_SYS: /hostfs/sys
+      HOST_ETC: /hostfs/etc
+      HOST_VAR: /hostfs/var
+      HOST_RUN: /hostfs/run
+    volumes:
+      - type: bind
+        source: ./configs/config.yaml
+        target: /etc/homelab-agent/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /
+        target: /hostfs
+        read_only: true
+        bind:
+          propagation: rslave
+    # To enable Docker monitoring, set modules.docker.enabled: true and
+    # uncomment both sections below. Export DOCKER_GID=$(stat -c %g /var/run/docker.sock).
+    # group_add: ["${DOCKER_GID}"]
+    # Add this entry to volumes above:
+    #   - /var/run/docker.sock:/var/run/docker.sock:ro
