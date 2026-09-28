@@ -97,6 +97,37 @@ func TestBrokerIntegration(t *testing.T) {
 	receive("integration/availability", "online")
 	receive("homeassistant/sensor/integration/cpu_percent/config", "")
 	receive("integration/sensor/cpu_percent/state", "")
+
+	// Seed a discovery from the old VPN module and verify an actual retained tombstone.
+	legacy := "homeassistant/sensor/integration/tailscale_ip/config"
+	if err := wait(ctx, observer.Publish(legacy, 1, true, []byte(`{"name":"old"}`))); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		client.controlMu.RLock()
+		seen := client.observedSensors[legacy]
+		client.controlMu.RUnlock()
+		if seen {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("legacy discovery not observed")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if err := client.Publish(ctx, []metric.Sample{sample}); err != nil {
+		t.Fatal(err)
+	}
+	removed := false
+	for !removed {
+		select {
+		case msg := <-messages:
+			removed = msg.Topic() == legacy && len(msg.Payload()) == 0
+		case <-ctx.Done():
+			t.Fatal("legacy discovery was not removed")
+		}
+	}
 	if server != nil {
 		remote, ok := server.Clients.Get("labbeacon-integration")
 		if !ok {

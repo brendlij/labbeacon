@@ -18,8 +18,6 @@ if [ -S "$socket" ]; then
   docker_enabled=true
   gid=$(stat -c '%g' "$socket")
 fi
-tailscale_enabled=false
-if [ -S /run/tailscale/tailscaled.sock ]; then tailscale_enabled=true; fi
 if [ ! -d "$directory" ]; then
   mkdir -p "$directory"
   chown 65532:65532 "$directory"
@@ -49,14 +47,13 @@ modules:
   system:
     enabled: true
     disk_paths: [/hostfs]
+    temperature: true
   docker:
     enabled: $docker_enabled
-    stats: true
-  tailscale:
-    enabled: $tailscale_enabled
+    stats: false
   services:
     enabled: false
-    checks: []
+    checks: [] # Add only selected systemd services in the UI.
 webui:
   enabled: true
   bind_address: $bind
@@ -76,7 +73,7 @@ compose_tmp=$(mktemp "$directory/.compose.XXXXXX")
 cat > "$compose_tmp" <<EOF
 services:
   labbeacon:
-    image: ghcr.io/brendlij/labbeacon:0.4.1
+    image: ghcr.io/brendlij/labbeacon:0.5.0
     restart: unless-stopped
     network_mode: host
     pid: host

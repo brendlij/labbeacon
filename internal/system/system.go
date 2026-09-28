@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -101,6 +102,9 @@ func (c *Collector) Collect(ctx context.Context) ([]metric.Sample, error) {
 		elapsed := now.Sub(c.last).Seconds()
 		next := map[string]gnet.IOCountersStat{}
 		for _, v := range counters {
+			if virtualInterface(v.Name) {
+				continue
+			}
 			next[v.Name] = v
 			if old, ok := c.previous[v.Name]; ok && elapsed > 0 {
 				key := "net_" + metric.Key(v.Name)
@@ -125,4 +129,13 @@ func Rate(current, previous uint64, seconds float64) float64 {
 		return 0
 	}
 	return float64(current-previous) / seconds
+}
+
+func virtualInterface(name string) bool {
+	for _, prefix := range []string{"lo", "veth", "docker", "br-", "tailscale", "wt0"} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }

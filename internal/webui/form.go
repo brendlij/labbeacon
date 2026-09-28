@@ -33,15 +33,11 @@ func specs() []section {
 			{Path: "agent.id", Label: "Agent ID", Kind: "text"}, {Path: "agent.name", Label: "Name", Kind: "text"}, {Path: "agent.poll_interval", Label: "Poll interval (e.g. 20s)", Kind: "text"}, {Path: "agent.expire_after", Label: "Expire after (e.g. 60s)", Kind: "text"}, {Path: "agent.log_level", Label: "Log level: debug / info / warn / error", Kind: "text"}, {Path: "agent.metrics_enabled", Label: "Agent version and uptime", Kind: "bool"},
 			{Path: "mqtt.broker", Label: "MQTT broker", Kind: "text"}, {Path: "mqtt.username", Label: "MQTT username", Kind: "text"}, {Path: "mqtt.password", Label: "MQTT password", Kind: "password"}, {Path: "mqtt.discovery_prefix", Label: "Discovery prefix", Kind: "text"}}},
 		{Title: "System", Hint: "Local metrics. Lists: one entry per line.", Fields: []field{
-			{Path: "modules.system.enabled", Label: "Enable system module", Kind: "bool"}, {Path: "modules.system.disk_paths", Label: "Disk paths", Kind: "lines"}, {Path: "modules.system.temperature", Label: "CPU temperature", Kind: "bool"}, {Path: "modules.system.processes", Label: "Top processes", Kind: "bool"}, {Path: "modules.system.top_n", Label: "Top-N (1–100)", Kind: "number"}, {Path: "modules.system.file_descriptors", Label: "File descriptors", Kind: "bool"}, {Path: "modules.system.boot_time", Label: "Boot time", Kind: "bool"}}},
+			{Path: "modules.system.enabled", Label: "Enable system module", Kind: "bool"}, {Path: "modules.system.disk_paths", Label: "Disk paths", Kind: "lines"}, {Path: "modules.system.temperature", Label: "CPU temperature", Kind: "bool"}, {Path: "modules.system.boot_time", Label: "Boot time", Kind: "bool"}}},
 		{Title: "Docker", Hint: "Monitoring and control have separate switches. Select permissions below.", Fields: []field{
-			{Path: "modules.docker.enabled", Label: "Enable Docker module", Kind: "bool"}, {Path: "modules.docker.socket_path", Label: "Socket path", Kind: "text"}, {Path: "modules.docker.timeout", Label: "Inventory / per-container timeout", Kind: "text"}, {Path: "modules.docker.stats", Label: "Container CPU / RAM", Kind: "bool"}, {Path: "modules.docker.control_containers.enabled", Label: "Allow container control", Kind: "bool"}, {Path: "modules.docker.image_updates.enabled", Label: "Anonymous image update checks", Kind: "bool"}, {Path: "modules.docker.image_updates.interval", Label: "Update check interval", Kind: "text"}, {Path: "modules.docker.image_updates.timeout", Label: "Registry timeout", Kind: "text"}}},
-		{Title: "Services & VPN", Hint: "Edit HTTP/TCP checks in the service list. Tailscale CLI is bundled in the image; host sockets are detected automatically. Separate Tailscale containers need a shared socket. NetBird requires its CLI and daemon.", Fields: []field{
-			{Path: "modules.services.enabled", Label: "Enable service checks", Kind: "bool"}, {Path: "modules.tailscale.enabled", Label: "Enable Tailscale", Kind: "bool"}, {Path: "modules.tailscale.command", Label: "Tailscale executable", Kind: "text"}, {Path: "modules.tailscale.socket_path", Label: "Tailscale socket path (blank: auto-detect)", Kind: "text"}, {Path: "modules.tailscale.timeout", Label: "Tailscale timeout", Kind: "text"}, {Path: "modules.netbird.enabled", Label: "Enable NetBird", Kind: "bool"}, {Path: "modules.netbird.command", Label: "NetBird executable", Kind: "text"}, {Path: "modules.netbird.timeout", Label: "NetBird timeout", Kind: "text"}}},
-		{Title: "Network", Hint: "The public IP address is retrieved over HTTPS and cached.", Fields: []field{
-			{Path: "modules.network.enabled", Label: "Enable network module", Kind: "bool"}, {Path: "modules.network.local_ips", Label: "Local IP addresses", Kind: "bool"}, {Path: "modules.network.public_ip.enabled", Label: "Public IP address", Kind: "bool"}, {Path: "modules.network.public_ip.endpoint", Label: "HTTPS endpoint", Kind: "text"}, {Path: "modules.network.public_ip.interval", Label: "IP cache interval", Kind: "text"}, {Path: "modules.network.public_ip.timeout", Label: "IP request timeout", Kind: "text"}}},
-		{Title: "Control actions", Hint: "Enabling these options allows future MQTT commands. This page does not execute control actions. Commands remain configured in the local YAML file.", Fields: []field{
-			{Path: "control_actions.enabled", Label: "Control actions – master switch", Kind: "bool"}, {Path: "agent_control.enabled", Label: "Allow agent restart (requires a supervisor)", Kind: "bool"}, {Path: "host_control.enabled", Label: "Allow host control", Kind: "bool"}, {Path: "host_control.timeout", Label: "Host command timeout", Kind: "text"}, {Path: "host_control.reboot.enabled", Label: "Enable reboot action", Kind: "bool"}, {Path: "host_control.reboot.confirm_required", Label: "Require MQTT confirmation for reboot", Kind: "bool"}, {Path: "host_control.shutdown.enabled", Label: "Enable shutdown action", Kind: "bool"}, {Path: "host_control.shutdown.confirm_required", Label: "Require MQTT confirmation for shutdown", Kind: "bool"}}},
+			{Path: "modules.docker.enabled", Label: "Enable Docker module", Kind: "bool"}, {Path: "modules.docker.socket_path", Label: "Socket path", Kind: "text"}, {Path: "modules.docker.timeout", Label: "Inventory / per-container timeout", Kind: "text"}, {Path: "modules.docker.stats", Label: "Container CPU / RAM", Kind: "bool"}, {Path: "modules.docker.control_containers.enabled", Label: "Allow container control", Kind: "bool"}, {Path: "control_actions.enabled", Label: "Control actions enabled", Kind: "bool"}}},
+		{Title: "Selected systemd services", Hint: "Only listed .service units are monitored. Status only; no service commands. In Docker, the host system bus is detected through HOST_RUN.", Fields: []field{
+			{Path: "modules.services.enabled", Label: "Enable systemd status", Kind: "bool"}, {Path: "modules.services.bus_socket", Label: "System bus socket (blank: auto-detect)", Kind: "text"}}},
 		{Title: "Web UI", Hint: "Changes in this section require a restart. Without TLS, login credentials are sent without encryption.", Fields: []field{
 			{Path: "webui.enabled", Label: "Enable web UI", Kind: "bool"}, {Path: "webui.bind_address", Label: "Bind address", Kind: "text"}, {Path: "webui.port", Label: "Port", Kind: "number"}, {Path: "webui.username", Label: "Login username", Kind: "text"}, {Path: "webui.password", Label: "Login password", Kind: "password"}, {Path: "webui.allowed_hosts", Label: "Allowed DNS names (without ports)", Kind: "lines"}}},
 	}
@@ -119,6 +115,9 @@ type serviceForm struct {
 func serviceValues(checks []config.Check) ([]serviceForm, string) {
 	out := make([]serviceForm, 0, len(checks))
 	for _, c := range checks {
+		if c.Type != "systemd" {
+			continue
+		}
 		out = append(out, serviceForm{Name: c.Name, Type: c.Type, URL: c.URL, ExpectedStatus: c.ExpectedStatus, Timeout: c.Timeout.String(), Host: c.Host, Port: c.Port, SystemdUnit: c.SystemdUnit, AllowControl: c.AllowControl})
 	}
 	data, _ := json.Marshal(out)
@@ -228,7 +227,7 @@ func parseForm(current config.Config, values url.Values) (config.Config, error) 
 		if err != nil {
 			return config.Config{}, fmt.Errorf("Service %s: invalid timeout", s.Name)
 		}
-		next.Modules.Services.Checks = append(next.Modules.Services.Checks, config.Check{Name: s.Name, Type: s.Type, URL: s.URL, ExpectedStatus: s.ExpectedStatus, Timeout: d, Host: s.Host, Port: s.Port, SystemdUnit: s.SystemdUnit, AllowControl: s.AllowControl})
+		next.Modules.Services.Checks = append(next.Modules.Services.Checks, config.Check{Name: s.Name, Type: "systemd", Timeout: d, SystemdUnit: s.SystemdUnit})
 	}
 	next.ApplyCheckDefaults()
 	return next, next.Validate()

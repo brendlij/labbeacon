@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendlij/labbeacon/internal/command"
 	"github.com/brendlij/labbeacon/internal/config"
 	"github.com/brendlij/labbeacon/internal/control"
 	"github.com/brendlij/labbeacon/internal/docker"
@@ -21,41 +20,10 @@ func controlEnabled(c config.Config) bool {
 	if !c.ControlActions.Enabled {
 		return false
 	}
-	if c.HostControl.Enabled || c.AgentControl.Enabled || c.Modules.Docker.ControlContainers.Enabled {
-		return true
-	}
-	for _, ch := range c.Modules.Services.Checks {
-		if ch.AllowControl {
-			return true
-		}
-	}
-	return false
+	return c.Modules.Docker.ControlContainers.Enabled
 }
 func prepareControls(ctx context.Context, cfg config.Config, log *slog.Logger) ([]control.Entry, []string) {
-	if !cfg.ControlActions.Enabled {
-		return nil, nil
-	}
-	entries := append(control.HostEntries(cfg.HostControl, command.Exec{}), control.ServiceEntries(cfg.Modules.Services, command.Exec{})...)
-	if cfg.AgentControl.Enabled {
-		entries = append(entries, control.Entry{Name: "Agent restart", Module: "agent", Action: control.Function{Key: "agent_restart", Run: func(context.Context) error { return control.ErrRestart }}})
-	}
-	var ready []control.Entry
-	var unavailable []string
-	for _, e := range entries {
-		preflight, cancel := context.WithTimeout(ctx, 5*time.Second)
-		var err error
-		if e.Check != nil {
-			err = e.Check(preflight)
-		}
-		cancel()
-		if err != nil {
-			log.Warn("control unavailable", "action", e.Action.ID(), "module", e.Module, "error", err)
-			unavailable = append(unavailable, e.Action.ID()+": "+err.Error())
-		} else {
-			ready = append(ready, e)
-		}
-	}
-	return ready, unavailable
+	return nil, nil // Host and systemd actions are outside the reduced scope.
 }
 
 func serve(parent context.Context, cfg config.Config, log *slog.Logger, paths ...string) error {
@@ -177,6 +145,7 @@ func serve(parent context.Context, cfg config.Config, log *slog.Logger, paths ..
 		registry = updated
 		cfg = live
 		client.SetExpiry(cfg.Agent.ExpireAfter)
+		client.SetServices(cfg.Modules.Services)
 		ticker.Reset(cfg.Agent.PollInterval)
 		ready, staticErrors = prepareControls(ctx, cfg, log)
 		state.Applied(cfg)

@@ -7,23 +7,18 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/brendlij/labbeacon/internal/agent"
-	"github.com/brendlij/labbeacon/internal/command"
 	"github.com/brendlij/labbeacon/internal/config"
 	"github.com/brendlij/labbeacon/internal/control"
 	"github.com/brendlij/labbeacon/internal/docker"
 	"github.com/brendlij/labbeacon/internal/module"
 	"github.com/brendlij/labbeacon/internal/mqtt"
-	"github.com/brendlij/labbeacon/internal/netbird"
-	"github.com/brendlij/labbeacon/internal/network"
 	"github.com/brendlij/labbeacon/internal/services"
 	"github.com/brendlij/labbeacon/internal/system"
-	"github.com/brendlij/labbeacon/internal/tailscale"
 	"github.com/brendlij/labbeacon/internal/version"
 )
 
@@ -72,33 +67,16 @@ func registered(cfg config.Config, client *mqtt.Client, log *slog.Logger) (*modu
 	}
 	systemCollector := system.New(cfg.Modules.System.DiskPaths)
 	systemCollector.Options = cfg.Modules.System
+	systemCollector.Options.Processes = false
+	systemCollector.Options.FileDescriptors = false
+	cfg.Modules.Docker.ImageUpdates.Enabled = false
 	dockerClient := docker.NewClient(cfg.Modules.Docker.SocketPath, cfg.Modules.Docker.Timeout)
-	dockerCollector := &docker.Collector{API: dockerClient, Timeout: cfg.Modules.Docker.Timeout, Config: cfg.Modules.Docker, Updates: docker.NewUpdateChecker(dockerClient, cfg.Modules.Docker.ImageUpdates)}
+	dockerCollector := &docker.Collector{API: dockerClient, Timeout: cfg.Modules.Docker.Timeout, Config: cfg.Modules.Docker}
 	modules := []module.Module{
 		module.Registration{ModuleName: "system", Active: cfg.Modules.System.Enabled, Collector: systemCollector},
 		module.Registration{ModuleName: "docker", Active: cfg.Modules.Docker.Enabled, Collector: dockerCollector},
-		module.Registration{ModuleName: "services", Active: cfg.Modules.Services.Enabled, Collector: services.New(cfg.Modules.Services.Checks)},
-		module.Registration{ModuleName: "network", Active: cfg.Modules.Network.Enabled, Collector: network.New(cfg.Modules.Network)},
+		module.Registration{ModuleName: "services", Active: cfg.Modules.Services.Enabled, Collector: services.NewWithSocket(cfg.Modules.Services.Checks, cfg.Modules.Services.BusSocket)},
 		module.Registration{ModuleName: "agent", Active: cfg.Agent.MetricsEnabled, Collector: &agent.Collector{Started: started, Session: client.Session}},
-	}
-	for name, cli := range map[string]config.CLI{"tailscale": cfg.Modules.Tailscale.CLI, "netbird": cfg.Modules.Netbird} {
-		if !cli.Enabled {
-			modules = append(modules, module.Registration{ModuleName: name, Active: false})
-			continue
-		}
-		resolved, e := exec.LookPath(cli.Command)
-		if e != nil {
-			log.Warn("module unavailable: CLI not found", "module", name, "command", cli.Command)
-			modules = append(modules, module.Registration{ModuleName: name, Active: true, Collector: module.Unavailable{Reason: fmt.Errorf("CLI not found: %s. Install the CLI on native hosts; use the current LabBeacon image for Tailscale. NetBird requires a custom image with its CLI and daemon connection", cli.Command)}})
-			continue
-		}
-		r := module.Registration{ModuleName: name, Active: true}
-		if name == "tailscale" {
-			r.Collector = &tailscale.Collector{Runner: command.Exec{}, Command: resolved, Timeout: cli.Timeout, SocketPath: cfg.Modules.Tailscale.SocketPath}
-		} else {
-			r.Collector = &netbird.Collector{Runner: command.Exec{}, Command: resolved, Timeout: cli.Timeout}
-		}
-		modules = append(modules, r)
 	}
 	registry := &module.Registry{}
 	for _, m := range modules {

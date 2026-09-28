@@ -5,6 +5,17 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-28
+
+### Changed
+- Focused agent/UI on Docker status and controls, host hardware metrics, and
+  explicitly selected systemd unit states. systemd reads the host D-Bus directly.
+- Removed VPN collectors and bundled CLI, HTTP/TCP probes, public-IP/network
+  inventory, image update checks and host/service actions from the active runtime.
+- Old configuration remains readable but removed modules are never started.
+- Removed virtual Docker/VPN interface noise; temperatures enabled for new configs.
+- Reconcile obsolete retained discovery, including unselected service states.
+
 ## [0.4.1] - 2026-09-27
 
 ### Fixed

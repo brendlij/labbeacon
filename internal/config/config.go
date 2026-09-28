@@ -68,8 +68,9 @@ type Check struct {
 	AllowControl   bool          `yaml:"allow_control"`
 }
 type Services struct {
-	Enabled bool    `yaml:"enabled"`
-	Checks  []Check `yaml:"checks"`
+	BusSocket string  `yaml:"bus_socket"`
+	Enabled   bool    `yaml:"enabled"`
+	Checks    []Check `yaml:"checks"`
 }
 type Modules struct {
 	Network   Network   `yaml:"network"`
@@ -96,7 +97,7 @@ type Config struct {
 func Defaults() Config {
 	return Config{ControlActions: ControlActions{Enabled: true}, WebUI: WebUI{Enabled: true, BindAddress: "127.0.0.1", Port: 8011}, Agent: Agent{PollInterval: 20 * time.Second, ExpireAfter: 60 * time.Second, LogLevel: "info", MetricsEnabled: true},
 		MQTT: MQTT{DiscoveryPrefix: "homeassistant"}, Modules: Modules{
-			System: System{DiskPaths: []string{"/"}, TopN: 5}, Docker: Docker{SocketPath: "/var/run/docker.sock", Timeout: 5 * time.Second, ImageUpdates: ImageUpdates{Interval: 6 * time.Hour, Timeout: 5 * time.Second}},
+			System: System{Temperature: true, DiskPaths: []string{"/"}, TopN: 5}, Docker: Docker{SocketPath: "/var/run/docker.sock", Timeout: 5 * time.Second, ImageUpdates: ImageUpdates{Interval: 6 * time.Hour, Timeout: 5 * time.Second}},
 			Network:   Network{LocalIPs: true, PublicIP: PublicIP{Endpoint: "https://api.ipify.org", Interval: 15 * time.Minute, Timeout: 5 * time.Second}},
 			Tailscale: Tailscale{CLI: CLI{Command: "tailscale", Timeout: 5 * time.Second}}, Netbird: CLI{Command: "netbird", Timeout: 5 * time.Second}},
 		HostControl: HostControl{Timeout: 15 * time.Second, Reboot: CommandAction{Command: []string{"systemctl", "--no-ask-password", "reboot"}, Preflight: []string{"systemctl", "--no-ask-password", "show", "--property=Version", "--value"}, ConfirmRequired: true}, Shutdown: CommandAction{Command: []string{"systemctl", "--no-ask-password", "poweroff"}, Preflight: []string{"systemctl", "--no-ask-password", "show", "--property=Version", "--value"}, ConfirmRequired: true}}}
@@ -261,6 +262,10 @@ func (c Config) Validate() error {
 				return fmt.Errorf("service %s: timeout must be positive", ch.Name)
 			}
 			switch ch.Type {
+			case "systemd":
+				if !unitPattern.MatchString(ch.SystemdUnit) {
+					return fmt.Errorf("service %s requires an exact .service unit name", ch.Name)
+				}
 			case "http":
 				u, e := url.Parse(ch.URL)
 				if e != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || ch.ExpectedStatus < 100 || ch.ExpectedStatus > 599 {

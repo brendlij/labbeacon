@@ -180,7 +180,7 @@ func (s *Server) base(w http.ResponseWriter, r *http.Request) page {
 	if s.Connected != nil {
 		connected = s.Connected()
 	}
-	return page{Authenticated: s.Settings.Username != "" && s.authenticated(r), Version: version.Version, CSRF: s.token(w, r), State: s.State.View(), MQTT: connected, ServiceDefault: serviceForm{Type: "http", ExpectedStatus: 200, Timeout: "5s"}}
+	return page{Authenticated: s.Settings.Username != "" && s.authenticated(r), Version: version.Version, CSRF: s.token(w, r), State: s.State.View(), MQTT: connected, ServiceDefault: serviceForm{Type: "systemd", ExpectedStatus: 200, Timeout: "5s"}}
 }
 func (s *Server) render(w http.ResponseWriter, name string, p page) {
 	var b bytes.Buffer

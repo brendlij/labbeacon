@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -83,17 +82,10 @@ func TestWebReloadWhileBrokerOffline(t *testing.T) {
 	if len(token) != 2 {
 		t.Fatal("missing CSRF token")
 	}
-	var probes atomic.Int32
-	probe := http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { probes.Add(1); w.WriteHeader(204) })}
-	pl, e := net.Listen("tcp", "127.0.0.1:0")
-	if e != nil {
-		t.Fatal(e)
-	}
-	go probe.Serve(pl)
-	defer probe.Close()
 	cfg.Agent.PollInterval = time.Second
 	cfg.Modules.Services.Enabled = true
-	cfg.Modules.Services.Checks = []config.Check{{Name: "probe", Type: "http", URL: "http://" + pl.Addr().String(), ExpectedStatus: 204, Timeout: time.Second}}
+	cfg.Modules.Services.Checks = []config.Check{{Name: "probe", Type: "systemd", SystemdUnit: "probe.service", Timeout: time.Second}}
+	cfg.Modules.Services.BusSocket = filepath.Join(t.TempDir(), "missing-bus")
 	cfg.MQTT.Broker = "tcp://127.0.0.1:2" // persisted only: must remain a restart notice
 	write(cfg)
 	reload := func() *http.Response {
@@ -109,11 +101,21 @@ func TestWebReloadWhileBrokerOffline(t *testing.T) {
 		t.Fatalf("reload: %d", r.StatusCode)
 	}
 	deadline = time.Now().Add(4 * time.Second)
-	for time.Now().Before(deadline) && probes.Load() < 2 {
+	var applied bool
+	for time.Now().Before(deadline) {
+		response, e := client.Get(base + "/")
+		if e == nil {
+			body, _ := io.ReadAll(response.Body)
+			response.Body.Close()
+			applied = strings.Contains(string(body), "missing-bus")
+		}
+		if applied {
+			break
+		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if probes.Load() < 2 {
-		t.Fatal("service list / one-second interval not applied live")
+	if !applied {
+		t.Fatal("selected systemd list not applied live")
 	}
 	r, e := client.Get(base + "/")
 	if e != nil {
@@ -130,14 +132,7 @@ func TestWebReloadWhileBrokerOffline(t *testing.T) {
 	if r := reload(); r.StatusCode != 400 {
 		t.Fatal("invalid reload accepted")
 	}
-	before := probes.Load()
-	deadline = time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && probes.Load() == before {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if probes.Load() == before {
-		t.Fatal("invalid reload stopped active checks")
-	}
+
 }
 
 func TestControlMasterGate(t *testing.T) {

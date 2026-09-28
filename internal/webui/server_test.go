@@ -164,11 +164,7 @@ func TestNativeFormOriginPolicy(t *testing.T) {
 func TestDangerAcknowledgmentAndConflict(t *testing.T) {
 	s, _ := fixture(t)
 	v, cookie := fullForm(t, s)
-	v.Del("host_control.reboot.confirm_required")
-	if w := post(s, "/config", v, cookie); w.Code != 400 {
-		t.Fatal("dangerous change accepted without acknowledgement")
-	}
-	v.Set("ack_danger", "yes")
+	v.Set("agent.poll_interval", "8s")
 	if w := post(s, "/config", v, cookie); w.Code != 303 {
 		t.Fatalf("acknowledged save failed: %s", w.Body.String())
 	}
@@ -213,7 +209,7 @@ func TestServicesDockerAndExport(t *testing.T) {
 	s.State.Report(nil, []Container{{Name: "web", Status: "running"}, {Name: "db", Status: "running"}})
 	v, cookie := fullForm(t, s)
 	v.Set("modules.services.enabled", "on")
-	v.Set("services_json", `[{"name":"Health","type":"http","url":"http://localhost/health","expected_status":204,"timeout":"2s"},{"name":"Database","type":"tcp","host":"localhost","port":5432,"timeout":"3s"}]`)
+	v.Set("services_json", `[{"name":"Health","systemd_unit":"health.service","timeout":"2s"},{"name":"Database","systemd_unit":"database.service","timeout":"3s"}]`)
 	v.Add("docker_allow", "web")
 	v.Add("docker_deny", "db")
 	if w := post(s, "/config", v, cookie); w.Code != 303 {
@@ -223,7 +219,7 @@ func TestServicesDockerAndExport(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if len(d.Config.Modules.Services.Checks) != 2 || d.Config.Modules.Services.Checks[1].Port != 5432 || len(d.Config.Modules.Docker.ControlContainers.Deny) != 1 {
+	if len(d.Config.Modules.Services.Checks) != 2 || d.Config.Modules.Services.Checks[1].SystemdUnit != "database.service" || len(d.Config.Modules.Docker.ControlContainers.Deny) != 1 {
 		t.Fatal("service or Docker values lost")
 	}
 	r := httptest.NewRequest("GET", "http://localhost/config/export", nil)
@@ -233,7 +229,7 @@ func TestServicesDockerAndExport(t *testing.T) {
 		t.Fatal("export differs from saved YAML")
 	}
 	v, cookie = fullForm(t, s)
-	v.Set("services_json", `[{"name":"Health edited","type":"http","url":"http://localhost/new","expected_status":200,"timeout":"1s"}]`)
+	v.Set("services_json", `[{"name":"Health edited","systemd_unit":"health.service","timeout":"1s"}]`)
 	if w := post(s, "/config", v, cookie); w.Code != 303 {
 		t.Fatal(w.Body.String())
 	}

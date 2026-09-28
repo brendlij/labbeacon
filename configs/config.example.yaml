@@ -1,94 +1,41 @@
 agent:
-  id: srv-01
-  name: Server 1
+  id: ser5-01
+  name: ser5-01
   poll_interval: 20s
   expire_after: 60s
-  log_level: info
-  metrics_enabled: true
-host_control:
-  enabled: false
-  timeout: 15s
-  reboot:
-    enabled: false
-    command: [systemctl, --no-ask-password, reboot]
-    preflight: [systemctl, --no-ask-password, show, --property=Version, --value]
-    confirm_required: true
-  shutdown:
-    enabled: false
-    command: [systemctl, --no-ask-password, poweroff]
-    preflight: [systemctl, --no-ask-password, show, --property=Version, --value]
-    confirm_required: true
-agent_control:
-  enabled: false # Needs systemd Restart=on-failure or a container restart policy.
 mqtt:
-  broker: tcp://192.168.1.10:1883
+  broker: tcp://127.0.0.1:1883
   username: ""
   password: ""
-  discovery_prefix: homeassistant
 modules:
   system:
     enabled: true
-    disk_paths: ["/"] # Add /mnt/data or other mounts here.
-    temperature: false
-    processes: false
-    top_n: 5
-    file_descriptors: false
-    boot_time: false
+    temperature: true
+    disk_paths: [/hostfs] # Native installation: use / instead.
   docker:
-    enabled: false
+    enabled: true
     socket_path: /var/run/docker.sock
     timeout: 5s
-    stats: false # Eight parallel requests, each with its own timeout.
+    stats: false # Optional per-container CPU/RAM; status is always collected.
     control_containers:
-      enabled: false
-      allow: [] # Empty: all names, but only when control is explicitly enabled.
-      deny: []  # Deny takes precedence, exact names without leading slash.
-    image_updates:
-      enabled: false
-      interval: 6h
-      timeout: 5s
+      enabled: false # Enable explicitly in Settings when wanted.
+      allow: [] # Empty: all containers once control is enabled.
+      deny: []
   services:
-    enabled: true
-    checks:
-      - name: AdGuard
-        type: http
-        url: http://192.168.1.10:3000
-        expected_status: 200
-        timeout: 5s
-        systemd_unit: adguard.service
-        allow_control: false
-      - name: Herbst Dashboard
-        type: tcp
-        host: 192.168.1.10
-        port: 8081
-        timeout: 5s
-  tailscale:
     enabled: false
-    command: tailscale
-    socket_path: "" # Auto-detect local or HOST_RUN/tailscale/tailscaled.sock.
-    timeout: 5s
-  netbird:
-    enabled: false
-    command: netbird
-    timeout: 5s
-  network:
-    enabled: false
-    local_ips: true
-    public_ip:
-      enabled: false
-      endpoint: https://api.ipify.org
-      interval: 15m
-      timeout: 5s
-
-# Embedded settings UI; explicit LAN binding is optional.
+    bus_socket: "" # Auto: HOST_RUN/dbus/system_bus_socket or /run/dbus/system_bus_socket.
+    checks: []
+    # Add only the units you want, for example:
+    # - name: SSH
+    #   type: systemd
+    #   systemd_unit: ssh.service
+    #   timeout: 5s
+control_actions:
+  enabled: true
 webui:
   enabled: true
   bind_address: 127.0.0.1
   port: 8011
   username: ""
   password: ""
-  allowed_hosts: [] # Exact DNS names, e.g. [server.home.arpa]; IPs work without this.
-
-# Master gate; individual actions above remain opt-in.
-control_actions:
-  enabled: true
+  allowed_hosts: []

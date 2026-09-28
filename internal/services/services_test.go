@@ -2,64 +2,42 @@ package services
 
 import (
 	"context"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
+	"errors"
+	"github.com/brendlij/labbeacon/internal/config"
 	"testing"
 	"time"
-
-	"github.com/brendlij/labbeacon/internal/config"
 )
 
-func TestHTTP(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/slow" {
-			<-r.Context().Done()
-			return
-		}
-		w.WriteHeader(204)
-	}))
-	defer srv.Close()
-	c := New([]config.Check{{Name: "ok", Type: "http", URL: srv.URL, ExpectedStatus: 204, Timeout: time.Second}, {Name: "wrong", Type: "http", URL: srv.URL, ExpectedStatus: 200, Timeout: time.Second}, {Name: "slow", Type: "http", URL: srv.URL + "/slow", ExpectedStatus: 200, Timeout: 20 * time.Millisecond}})
-	s, err := c.Collect(context.Background())
-	if err != nil {
-		t.Fatal(err)
+type fakeReader struct{ calls []string }
+
+func (r *fakeReader) Read(ctx context.Context, unit string) (Status, error) {
+	r.calls = append(r.calls, unit)
+	if unit == "broken.service" {
+		return Status{}, errors.New("bus failure")
 	}
-	if s[0].Value != "ON" || s[1].Value != "OFF" || s[2].Value != "OFF" {
-		t.Fatalf("bad states: %v", s)
+	if unit == "missing.service" {
+		return Status{Load: "not-found", Active: "inactive"}, nil
 	}
-	if s[0].Device.Kind != "service" || s[0].Device.Name != "ok" || s[0].Name != "Connectivity" {
-		t.Fatal("incorrect service grouping")
-	}
-	if s[0].Attributes["checked_at"] == nil || s[0].Attributes["response_time_ms"] == nil {
-		t.Fatal("missing attributes")
-	}
+	return Status{Load: "loaded", Active: "inactive", Sub: "dead"}, nil
 }
-func TestTCP(t *testing.T) {
-	l, e := net.Listen("tcp", "127.0.0.1:0")
-	if e != nil {
-		t.Fatal(e)
+func TestOnlySelectedSystemdStates(t *testing.T) {
+	r := &fakeReader{}
+	c := &Collector{Reader: r, Checks: []config.Check{
+		{Name: "old", Type: "http", URL: "http://must-not-be-called.invalid"},
+		{Name: "SSH", Type: "systemd", SystemdUnit: "ssh.service", Timeout: time.Second},
+		{Name: "Missing", Type: "systemd", SystemdUnit: "missing.service", Timeout: time.Second},
+		{Name: "Broken", Type: "systemd", SystemdUnit: "broken.service", Timeout: time.Second},
+	}}
+	samples, err := c.Collect(context.Background())
+	if err == nil || len(samples) != 2 || len(r.calls) != 3 {
+		t.Fatalf("bad partial collection: %v %v", samples, err)
 	}
-	defer l.Close()
-	host, port, e := net.SplitHostPort(l.Addr().String())
-	if e != nil {
-		t.Fatal(e)
+	if samples[0].Value != "inactive" || samples[0].Component != "sensor" || samples[0].Device.Name != "SSH" || samples[0].Attributes["unit"] != "ssh.service" || samples[1].Value != "not-found" {
+		t.Fatalf("bad states: %v", samples)
 	}
-	p, e := strconv.Atoi(port)
-	if e != nil {
-		t.Fatal(e)
-	}
-	c := New([]config.Check{{Name: "tcp", Type: "tcp", Host: host, Port: p, Timeout: time.Second}})
-	s, e := c.Collect(context.Background())
-	if e != nil || s[0].Value != "ON" {
-		t.Fatalf("%v %v", s, e)
-	}
-	if e = l.Close(); e != nil {
-		t.Fatal(e)
-	}
-	s, e = c.Collect(context.Background())
-	if e != nil || s[0].Value != "OFF" {
-		t.Fatalf("%v %v", s, e)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err = c.Collect(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation ignored")
 	}
 }

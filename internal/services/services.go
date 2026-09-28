@@ -1,95 +1,99 @@
+// Package services reads only explicitly selected systemd unit states.
 package services
 
 import (
 	"context"
-	"net"
-	"net/http"
-	"strconv"
-	"sync"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/brendlij/labbeacon/internal/config"
 	"github.com/brendlij/labbeacon/internal/metric"
+	"github.com/godbus/dbus/v5"
 )
 
+type Status struct{ Load, Active, Sub string }
+type Reader interface {
+	Read(context.Context, string) (Status, error)
+}
 type Collector struct {
 	Checks []config.Check
-	Client *http.Client
+	Reader Reader
 }
 
-func New(checks []config.Check) *Collector {
-	return &Collector{Checks: checks, Client: &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+func New(checks []config.Check) *Collector { return NewWithSocket(checks, "") }
+func NewWithSocket(checks []config.Check, socket string) *Collector {
+	return &Collector{Checks: checks, Reader: Bus{Socket: socket}}
 }
 func (c *Collector) Collect(ctx context.Context) ([]metric.Sample, error) {
-	results := make([]*metric.Sample, len(c.Checks))
-	jobs := make(chan int, len(c.Checks))
-	for i := range c.Checks {
-		jobs <- i
-	}
-	close(jobs)
-	var wg sync.WaitGroup
-	for range min(8, len(c.Checks)) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := range jobs {
-				if ctx.Err() != nil {
-					return
-				}
-				s := c.check(ctx, c.Checks[i])
-				if ctx.Err() == nil {
-					results[i] = &s
-				}
-			}
-		}()
-	}
-	wg.Wait()
-	out := make([]metric.Sample, 0, len(results))
-	for _, s := range results {
-		if s != nil {
-			out = append(out, *s)
+	var out []metric.Sample
+	var errs []error
+	for _, check := range c.Checks {
+		if check.Type != "systemd" {
+			continue
+		} // Legacy HTTP/TCP config is inert.
+		if ctx.Err() != nil {
+			return out, ctx.Err()
 		}
+		timeout := check.Timeout
+		if timeout <= 0 {
+			timeout = 5 * time.Second
+		}
+		request, cancel := context.WithTimeout(ctx, timeout)
+		state, err := c.Reader.Read(request, check.SystemdUnit)
+		cancel()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", check.SystemdUnit, err))
+			continue
+		}
+		value := state.Active
+		if state.Load == "not-found" {
+			value = "not-found"
+		}
+		s := metric.Sensor("service_"+metric.Key(check.Name), "State", "", value)
+		s.Device = metric.DeviceRef{Kind: "service", Name: check.Name}
+		s.Attributes = map[string]any{"unit": check.SystemdUnit, "load_state": state.Load, "sub_state": state.Sub}
+		out = append(out, s)
 	}
-	return out, ctx.Err()
+	return out, errors.Join(errs...)
 }
-func (c *Collector) check(parent context.Context, ch config.Check) metric.Sample {
-	ctx, cancel := context.WithTimeout(parent, ch.Timeout)
-	defer cancel()
-	start := time.Now()
-	online := false
-	attrs := map[string]any{"checked_at": start.UTC().Format(time.RFC3339Nano), "check_type": ch.Type}
-	switch ch.Type {
-	case "http":
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ch.URL, nil)
-		if err == nil {
-			resp, e := c.Client.Do(req)
-			err = e
-			if resp != nil {
-				attrs["status_code"] = resp.StatusCode
-				online = resp.StatusCode == ch.ExpectedStatus
-				if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-					err = closeErr
-				}
-			}
-		}
-		if err != nil {
-			online = false
-			attrs["error"] = "HTTP request failed"
-		}
-	case "tcp":
-		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", net.JoinHostPort(ch.Host, strconv.Itoa(ch.Port)))
-		if err == nil {
-			online = true
-			if err = conn.Close(); err != nil {
-				online = false
-			}
-		}
-		if err != nil {
-			attrs["error"] = "TCP connection failed"
+
+type Bus struct{ Socket string }
+
+func (b Bus) Read(ctx context.Context, unit string) (Status, error) {
+	socket := b.Socket
+	if socket == "" {
+		socket = "/run/dbus/system_bus_socket"
+		if hostRun := os.Getenv("HOST_RUN"); hostRun != "" {
+			socket = filepath.Join(hostRun, "dbus", "system_bus_socket")
 		}
 	}
-	attrs["response_time_ms"] = float64(time.Since(start).Microseconds()) / 1000
-	s := metric.Binary("service_"+metric.Key(ch.Name), "Connectivity", online, attrs)
-	s.Device = metric.DeviceRef{Kind: "service", Name: ch.Name}
-	return s
+	conn, err := dbus.Connect("unix:path="+dbus.EscapeBusAddressValue(socket), dbus.WithContext(ctx))
+	if err != nil {
+		return Status{}, fmt.Errorf("host system bus unavailable at %s; check the host mount and D-Bus read permissions: %w", socket, err)
+	}
+	defer conn.Close()
+	var path dbus.ObjectPath
+	// Loading a unit's metadata does not start, enable, or restart the service.
+	err = conn.Object("org.freedesktop.systemd1", "/org/freedesktop/systemd1").CallWithContext(ctx, "org.freedesktop.systemd1.Manager.LoadUnit", 0, unit).Store(&path)
+	if err != nil {
+		var busErr dbus.Error
+		if errors.As(err, &busErr) && busErr.Name == "org.freedesktop.systemd1.NoSuchUnit" {
+			return Status{Load: "not-found", Active: "inactive"}, nil
+		}
+		return Status{}, err
+	}
+	var props map[string]dbus.Variant
+	err = conn.Object("org.freedesktop.systemd1", path).CallWithContext(ctx, "org.freedesktop.DBus.Properties.GetAll", 0, "org.freedesktop.systemd1.Unit").Store(&props)
+	if err != nil {
+		return Status{}, err
+	}
+	get := func(key string) string { value, _ := props[key].Value().(string); return value }
+	state := Status{Load: get("LoadState"), Active: get("ActiveState"), Sub: get("SubState")}
+	if state.Load == "" || state.Active == "" {
+		return Status{}, fmt.Errorf("systemd returned incomplete unit properties")
+	}
+	return state, nil
 }

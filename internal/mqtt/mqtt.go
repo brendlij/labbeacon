@@ -31,20 +31,24 @@ type Publisher interface {
 	Publish(string, byte, bool, interface{}) paho.Token
 }
 type Client struct {
-	expiry    atomic.Int64
-	controlMu sync.RWMutex
-	session   string
-	Commands  chan control.Request
-	buttons   map[string]bool
-	observed  map[string]bool
-	log       *slog.Logger
-	client    paho.Client
-	cfg       config.Config
-	Wake      chan struct{}
+	observedSensors map[string]bool
+	serviceKeys     map[string]bool
+	expiry          atomic.Int64
+	controlMu       sync.RWMutex
+	session         string
+	Commands        chan control.Request
+	buttons         map[string]bool
+	observed        map[string]bool
+	log             *slog.Logger
+	client          paho.Client
+	cfg             config.Config
+	Wake            chan struct{}
 }
 
 func New(cfg config.Config, log *slog.Logger) *Client {
 	c := &Client{cfg: cfg, Wake: make(chan struct{}, 1), Commands: make(chan control.Request, 8), buttons: map[string]bool{}, observed: map[string]bool{}, log: log}
+	c.SetServices(cfg.Modules.Services)
+	c.observedSensors = map[string]bool{}
 	c.expiry.Store(int64(cfg.Agent.ExpireAfter))
 	opts := paho.NewClientOptions().AddBroker(cfg.MQTT.Broker).SetClientID("labbeacon-"+cfg.Agent.ID).
 		SetUsername(cfg.MQTT.Username).SetPassword(cfg.MQTT.Password).
@@ -162,6 +166,9 @@ func PublishSample(ctx context.Context, p Publisher, cfg config.Config, s metric
 }
 func (c *Client) Publish(ctx context.Context, samples []metric.Sample) error {
 	if err := c.Online(ctx); err != nil {
+		return err
+	}
+	if err := c.cleanup(ctx); err != nil {
 		return err
 	}
 	for _, s := range samples {

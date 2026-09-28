@@ -31,10 +31,9 @@ jobs:
           MQTT_TEST_BROKER=tcp://127.0.0.1:18884 go test -race -count=1 ./internal/mqtt -run TestBrokerIntegration
       - name: Container build
         run: docker build -t labbeacon:test .
-      - name: Setup and bundled Tailscale smoke test
+      - name: Setup smoke test
         run: |
           sh -n deploy/setup.sh
-          docker run --rm --entrypoint sh labbeacon:test -c 'tailscale version'
           sudo sh deploy/setup.sh --lan /tmp/labbeacon-setup-smoke > /tmp/labbeacon-setup.log
           sudo docker compose -f /tmp/labbeacon-setup-smoke/compose.generated.yaml config --quiet
           sudo docker run --rm -v /tmp/labbeacon-setup-smoke:/etc/labbeacon labbeacon:test -config /etc/labbeacon/config.yaml -check-config
